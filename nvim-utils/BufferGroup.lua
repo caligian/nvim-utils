@@ -1,4 +1,3 @@
-require "nvim-utils.Autocmd"
 require "nvim-utils.Kbd"
 
 if not BufferGroup then
@@ -28,13 +27,16 @@ function BufferGroup:create_reinclude_buffers_picker()
   end
 
   excluded = {
-    results = excluded,
+    results = list.map(excluded, tostring),
     entry_maker = function(obj)
+      obj = tonumber(obj)
       local name = Buffer.get_name(obj)
+
       return {
         display = name,
-        value = tostring(obj),
+        value = name,
         ordinal = name,
+        bufnr = obj,
       }
     end,
   }
@@ -42,7 +44,7 @@ function BufferGroup:create_reinclude_buffers_picker()
   user.telescope()
   local function default_action(bufnr)
     list.each(user.telescope:selected(bufnr, true), function(obj)
-      self:reinclude_buffer(tonumber(obj.value))
+      self:reinclude_buffer(obj.bufnr)
     end)
   end
 
@@ -68,6 +70,7 @@ end
 
 function BufferGroup.telescope_list_groups()
   groups = keys(user.buffer_groups)
+
   if #groups == 0 then
     return
   end
@@ -104,7 +107,7 @@ function BufferGroup.telescope_list_groups_for_buffer(bufnr)
     return
   end
 
-  groups = keys(user.buffers[bufnr].buffer_groups)
+  groups = keys(user.buffers[bufnr].buffer_groups or {})
   if #groups == 0 then
     return
   end
@@ -149,8 +152,9 @@ function BufferGroup:telescope_list_buffers()
       local pattern = sprintf("{%s}", join(totable(self.pattern), " "))
       return {
         display = x:gsub(os.getenv "HOME", "~") .. " " .. event .. " " .. pattern,
-        value = bufnr,
+        value = x,
         ordinal = x,
+        bufnr = bufnr,
       }
     end,
   }
@@ -169,7 +173,7 @@ local function create_buffer_picker(self)
     exclude = function(prompt_bufnr)
       local bufs = user.telescope:selected(prompt_bufnr, true)
       list.each(bufs, function(buf)
-        self:exclude_buffer(buf.value)
+        self:exclude_buffer(buf.bufnr)
       end)
     end,
   }
@@ -178,7 +182,7 @@ local function create_buffer_picker(self)
   return T:create_picker(ls, {
     function(prompt_bufnr)
       local buf = user.telescope:selected(prompt_bufnr)
-      Buffer.open(buf.value)
+      Buffer.open(buf.bufnr)
     end,
     {
       "n",
@@ -314,16 +318,12 @@ function BufferGroup:delete()
   end)
 end
 
-function BufferGroup:is_active()
-  return self.autocmd and self.autocmd:exists() or false
-end
-
 function BufferGroup:disable()
   if not self.autocmd then
     return
   end
 
-  self.autocmd:disable()
+  vim.api.nvim_del_autocmd(self.autocmd)
   self.autocmd = nil
 
   return self
@@ -331,7 +331,7 @@ end
 
 function BufferGroup:init(name, event, pattern, opts)
   local already = user.buffer_groups[name]
-  if already and already:is_active() then
+  if already and already.autocmd then
     return already
   end
 
@@ -342,8 +342,10 @@ function BufferGroup:init(name, event, pattern, opts)
   self.exclude = exclude
   self.name = name
   self.buffers = {}
-  self.autocmd = Autocmd(event, {
-    name = self.name,
+
+  vim.api.nvim_create_augroup('BufferGroup', {clear = false})
+
+  self.autocmd = vim.api.nvim_create_autocmd(event, {
     group = "BufferGroup",
     pattern = self.pattern,
     callback = function(o)
@@ -355,7 +357,6 @@ function BufferGroup:init(name, event, pattern, opts)
     end,
   })
 
-  user.buffer_groups[self.name] = self
   self.telescope = setmetatable({}, {
     __index = function(here, key)
       if T[key] then
@@ -366,6 +367,7 @@ function BufferGroup:init(name, event, pattern, opts)
     end,
   })
 
+  user.buffer_groups[self.name] = self
   return self
 end
 
