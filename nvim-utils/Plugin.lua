@@ -139,7 +139,7 @@ end
 
 function Plugin:configure()
   if self.setup then
-    vim.schedule(function() 
+    vim.schedule(function()
       self:setup()
     end)
   end

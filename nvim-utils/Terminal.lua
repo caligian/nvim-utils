@@ -1,7 +1,6 @@
 require "nvim-utils.Buffer"
 
 Terminal = class("Terminal", { "stop_all" })
-user.terminals = user.terminals or {}
 
 Terminal.exceptions = {
   invalid_command = "expected valid command",
@@ -320,6 +319,7 @@ function Terminal:stop()
   return job_id
 end
 
+
 function Terminal:delete()
   local job_id = self:stop()
   if not job_id then
@@ -353,9 +353,6 @@ function Terminal:reset()
   return Terminal(self.cmd, self.opts)
 end
 
-vim.api.nvim_create_autocmd("ExitPre", {
-  pattern = "*",
-  callback = function()
-    Terminal.stop_all()
-  end,
-})
+Terminal.close = Terminal.stop
+Terminal.is_active = Terminal.is_running
+

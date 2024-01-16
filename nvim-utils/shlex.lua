@@ -1,4 +1,4 @@
-shlex = namespace "shlex"
+shlex = namespace()
 
 ---
 -- @tparam string cmd
@@ -89,6 +89,57 @@ end
 
 function shlex:__call(cmd)
   return shlex.parse(cmd)
+end
+
+local lpeg = require "lpeg"
+local B = lpeg.B
+local C = lpeg.C
+local Cp = lpeg.Cp()
+local P = lpeg.P
+local Ct = lpeg.Ct
+local Cs = lpeg.Cs
+
+local function match_single_quotes(cmd, init)
+  init = init or 1
+  local wht = P " " ^ 0
+  local single_quote = wht * P "'"
+  local elem = C((1 - single_quote) ^ 0)
+  local quoted_elem = single_quote * elem * single_quote
+  local other = C((1 - quoted_elem) ^ 0)
+  local pat = Ct((other * single_quote * elem * single_quote * wht) ^ 1)
+  local match = pat:match(cmd, init)
+
+  if not match then
+    return { cmd }
+  end
+
+  return list.filter(match, function(x)
+    return #x > 0
+  end)
+end
+
+local function match_double_quotes(cmd, init)
+  init = init or 1
+  local wht = P " " ^ 0
+  local escaped = P '\\"'
+  local quote = B(1 - escaped) * P '"'
+  local elem = C((1 - quote) ^ 0)
+  local other = C((1 - quote) ^ 0) * wht
+  local pat = other * wht * (quote * elem * quote * wht * other) ^ 0
+  local match = Ct(pat):match(cmd, init)
+
+  if not match then
+    return
+  end
+
+  return list.filter(match, function(x)
+    return #x > 0
+  end)
+end
+
+local function get_quote_pos(cmd, init)
+  local first_quote = cmd:find("'", init)
+  local first_double_quote = (not cmd:find('\\"', init)) and cmd:find('"', init)
 end
 
 return shlex

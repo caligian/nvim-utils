@@ -1,29 +1,10 @@
-local ks = keys(vim.api)
-
 Win = namespace()
-Tabpage = namespace()
+
 Winid = namespace()
-local funs
+Winid:include(nvim.win)
 
-funs = list.filter(ks, function (x)
-  return x:match('^nvim_win')
-end)
-
-list.each(funs, function (x)
-  local k = x
-  x = x:gsub('^nvim_win_', '')
-  Winid[x] = vim.api[k]
-end)
-
-funs  = list.filter(ks, function (x)
-  return x:match('^nvim_tab')
-end)
-
-list.each(funs, function (x)
-  local k = x
-  x = x:gsub('^nvim_tabpage_', '')
-  Tabpage[x] = vim.api[k]
-end)
+Tabpage = namespace()
+Tabpage:include(nvim.tabpage)
 
 local call = vim.api.nvim_win_call
 wrap = identity

@@ -1,227 +1,59 @@
-require "nvim-utils.shlex"
+require "nvim-utils.state"
 
-local uv = require "luv"
+local jobs = {
+  start = vim.fn.jobstart,
+  stop = vim.fn.jobstop,
+  close = vim.fn.chanclose,
+  getpid = vim.fn.getpid,
+  send = vim.fn.chansend,
+}
 
---- @class Job.pipes
---- @field stderr uv_pipe_t
---- @field stdout uv_pipe_t
---- @field stdin uv_pipe_t
-
---- @class Job.opts
---- @field cwd string
---- @field split string|boolean
---- @field float boolean|table
---- @field before function
---- @field on_exit function
---- @field on_stdout function
---- @field on_stderr function
---- @field after function
---- @field output boolean
---- @field args string[]
-
---- @class Job.output
---- @field buffer number
---- @field stdout string[]
---- @field stderr string[]
-
---- @class Job
---- @field cmd string|string[]
---- @field check uv_check_t
---- @field on_stdout function
---- @field on_stderr function
---- @field on_exit function
---- @field after function
---- @field before function
---- @field output Job.output
---- @field handle uv_handle_t
---- @field pipes Job.pipes
---- @field exit_status number
---- @overload fun(cmd:string, opts?:Job.opts): Job
-Job = class("Job", { format_buffer = true, shell = true })
-dict.get(user, "jobs", true)
-
-function Job:mkpipes()
-  self.pipes = {} --[[@as Job.pipes]]
-  local stdout, stderr, stdin
-
-  stdout = uv.new_pipe()
-  stderr = uv.new_pipe()
-  stdin = uv.new_pipe()
-
-  self.pipes.stdout = stdout
-  self.pipes.stderr = stderr
-  self.pipes.stdin = stdin
-end
+Job = class("Job", { "shell", "format_buffer" })
 
 function Job:opts(opts)
-  local remove = {
-    "args",
-    "on_stdout",
-    "on_stderr",
-    "on_exit",
-    "command_maker",
-    "shell",
-    "show",
-    "output",
-    "before",
-    "after",
+  return {
+    clear_env = self.clear_env,
+    cwd = self.cwd,
+    detach = self.detach,
+    env = self.env,
+    height = self.height,
+    on_exit = self.on_exit,
+    on_stdout = self.on_stdout,
+    on_stderr = self.on_stderr,
+    overlapped = self.overlapped,
+    pty = self.pty,
+    rpc = self.rpc,
+    stderr_buffered = self.stderr_buffered,
+    stdout_buffered = self.stdout_buffered,
+    stdin = self.stdin,
+    width = self.width,
   }
-
-  opts = copy(opts or {})
-  list.each(remove, function(x)
-    opts[x] = nil
-  end)
-
-  opts.stdio = {
-    self.pipes.stdin,
-    self.pipes.stdout,
-    self.pipes.stderr,
-  }
-
-  opts.args = self.args
-
-  return opts
 end
 
-local function write_cmd(cmd)
-  local tempfile = vim.fn.tempname()
-  local fh = io.open(tempfile, "w")
+function Job:_create_output_handlers()
+  local opts = self
+  local on_stdout = self.on_stdout
+  local on_stderr = self.on_stderr
 
-  if not fh then
-    error("could not write command: " .. cmd)
+  local function collect(job_id, data, event)
+    list.extend(self.output[event], { data })
+    if event == "stdout" and on_stdout then
+      on_stdout(job_id, data, event)
+    elseif event == "stderr" and on_stderr then
+      on_stderr(job_id, data, event)
+    end
   end
 
-  fh:write(cmd)
-  fh:close()
-
-  return tempfile
+  self.on_stderr = vim.schedule_wrap(collect)
+  self.on_stdout = vim.schedule_wrap(collect)
 end
 
-local function create_cmd(cmd, cmdmaker, shell)
-  local path, fullcmd, shell
-
-  if not cmdmaker then
-    if shell == "zsh" then
-      fullcmd = join({
-        "#!/usr/bin/zsh",
-        cmd,
-      }, "\n")
-    else
-      fullcmd = join({
-        "#!/bin/bash",
-        cmd,
-      }, "\n")
-    end
-  else
-    fullcmd = cmdmaker(cmd)
-  end
-
-  path = write_cmd(fullcmd)
-
-  return path, fullcmd, "bash", { path }
-end
-
-function Job:start(opts)
-  if self:is_running() then
-    return self
-  end
-
-  opts = opts or {}
-
-  self:mkpipes()
-  self:_create_on_exit_handler(opts)
-
-  if opts.show or opts.output then
-    self:_create_output_handlers(opts)
-  end
-
-  local cmd, args
-  if is_string(self.cmd) then
-    local fullcmd, path
-
-    path, fullcmd, cmd, args = create_cmd(self.cmd, opts.command_maker)
-    self.shellcmd = fullcmd
-    self.cmd_path = path
-    self.args = args
-  end
-
-  local before = opts.before
-  local after = opts.after
-
-  if before then
-    before()
-  end
-
-  opts = self:opts(opts)
-
-  local function on_exit(...)
-    if self.cmd_path then
-      Path.delete(self.cmd_path)
-    end
-
-    self.on_exit(...)
-
-    if after then
-      after(self)
-    end
-  end
-
-  local handle = uv.spawn(cmd, opts, on_exit)
-
-  if not handle then
-    error("could not run command: " .. dump(cmd))
-  end
-
-  self.handle = handle
-  self.check = uv.new_check()
-
-  self.check:start(vim.schedule_wrap(function()
-    if self:is_closing() then
-      self:close()
-    end
-  end))
-
-  if self.on_stderr then
-    uv.read_start(self.pipes.stderr, self.on_stderr)
-    uv.read_start(self.pipes.stderr, self.on_stderr)
-  end
-
-  if self.on_stdout then
-    uv.read_start(self.pipes.stdout, self.on_stdout)
-  end
-
-  user.jobs[self.handle] = self
-
-  return self
-end
-
-function Job:_create_output_handlers(opts)
-  local function collect(_, data, handler_type, handler)
-    if data then
-      data = vim.split(data, "\n")
-      list.extend(self.output[handler_type], { data })
-    end
-
-    if handler then
-      handler(data)
-    end
-  end
-
-  self.on_stderr = vim.schedule_wrap(function(err, data)
-    collect(err, data, "stderr", opts.on_stderr)
-  end)
-
-  self.on_stdout = vim.schedule_wrap(function(err, data)
-    collect(err, data, "stdout", opts.on_stdout)
-  end)
-end
-
-function Job:_create_on_exit_handler(opts)
-  opts = opts or {}
-  local show = opts.show
-  local output = defined(show and true, opts.output)
-  local stdout = self.output.stdout
-  local stderr = self.output.stderr
+function Job:_create_on_exit_handler()
+  local show = self.show
+  local output = self.output
+  local stdout = output and output.stdout
+  local stderr = output and output.stderr
+  local on_exit = self.on_exit
 
   local function notempty(x)
     return #x > 0
@@ -251,6 +83,10 @@ function Job:_create_on_exit_handler(opts)
     local lines = has_lines()
 
     if lines.stdout then
+      if stdout[1] == "" then
+        table.remove(stdout, 1)
+      end
+
       if list.last(stdout) == "" then
         list.pop(stdout)
       end
@@ -259,6 +95,10 @@ function Job:_create_on_exit_handler(opts)
     end
 
     if lines.stderr then
+      if stderr[1] == "" then
+        table.remove(stderr, 1)
+      end
+
       if list.last(stderr) == "" then
         list.pop(stderr)
       end
@@ -300,169 +140,66 @@ function Job:_create_on_exit_handler(opts)
     end
   end
 
-  self.on_exit = vim.schedule_wrap(function(exit_status)
+  self.on_exit = vim.schedule_wrap(function(id, exit_status)
     self.exit_status = exit_status
-    self:close()
 
-    if output then
+    if output and show then
       show_output()
     end
 
-    if opts.on_exit then
-      opts.on_exit(self)
+    if on_exit then
+      on_exit(copy(self))
     end
+
+    if after then
+      after(self)
+    end
+
+    self.job_id = nil
   end)
 end
 
-function Job:init(cmd)
-  assert_is_a[union("string", "table")](cmd)
-
-  if is_table(cmd) then
-    cmd[1] = whereis(cmd[1])[1]
-    assert(cmd and not is_empty(cmd), "invalid executable: " .. dump(cmd))
-
-    self.cmd = cmd[1]
-    self.args = list.sub(cmd, 2, -1)
-  else
-    self.cmd = cmd
-    self.args = {}
-  end
-
-  self.output = { stdout = {}, stderr = {}, buffer = false }
-
-  return self
-end
-
----@diagnostic disable-next-line: duplicate-set-field
-function Job:wait(timeout, tries, inc)
-  if self.exit_status then
-    return true
-  elseif not self.handle or not uv.is_active(self.handle) then
+function Job:getpid()
+  if not self.job_id then
     return false
   end
 
-  timeout = timeout or 50
-  tries = tries or 10
-  inc = inc or timeout / 5
-  local i = 0
-
-  while i <= tries do
-    if self.exit_status then
-      break
-    elseif uv.is_closing(self.handle) then
-      break
-    elseif self:is_closing "stdout" or self:is_closing "stderr" then
-      break
-    end
-
-    vim.wait(timeout)
-
-    timeout = timeout + inc
-    i = i + 1
-    inc = timeout / 10
-  end
-
-  return self.exit_status ~= nil
+  return getpid(job.getpid(self.job_id))
 end
 
-function Job:wait_for_output(timeout, tries, inc)
-  if self:wait(timeout, tries, inc) then
-    return { stdout = self.output.stdout, stderr = self.output.stderr }
+function Job:is_active()
+  if not self.job_id then
+    return false
+  elseif self.stopped then
+    return false
   end
 
-  return false
+  return getpid(self:getpid()) and self
 end
 
 function Job:close()
-  if not self.handle then
+  if not self.job_id then
     return
   end
 
-  self.pipes.stdout:shutdown()
-  self.pipes.stderr:shutdown()
-  self.handle:close()
-  self.check:stop()
-
-  user.jobs[self.handle] = nil
-
-  self.handle = nil
+  jobs.close(self.job_id)
+  self.job_id = nil
 
   return self
 end
 
 Job.stop = Job.close
 
-function Job:is_active()
-  if not self.handle then
-    return false
-  elseif not uv.is_active(self.handle) then
-    return false
-  end
-
-  return true
-end
-
-function Job:is_closing(pipes)
-  if not self.handle then
-    return false
-  elseif pipes == true then
-    return self.pipes.stdin and uv.is_closing(self.pipes.stdin),
-      self.pipes.stdout and uv.is_closing(self.pipes.stdout),
-      self.pipes.stderr and uv.is_closing(self.pipes.stderr)
-  elseif pipes == "stdout" then
-    return self.pipes.stdout and uv.is_closing(self.pipes.stdout)
-  elseif pipes == "stdin" then
-    return self.pipes.stdin and uv.is_closing(self.pipes.stdin)
-  elseif pipes == "stderr" then
-    return self.pipes.stderr and uv.is_closing(self.pipes.stderr)
-  else
-    return uv.is_closing(self.handle)
-  end
-end
-
-function Job:close_stderr_pipe()
-  if self.pipes.stderr and not uv.is_closing(self.pipes.stderr) then
-    self.pipes.stderr:shutdown()
-    return true
-  end
-
-  return false
-end
-
-function Job:close_stdin_pipe()
-  if self.pipes.stdin and not uv.is_closing(self.pipes.stdin) then
-    self.pipes.stdin:shutdown()
-    return true
-  end
-
-  return false
-end
-
-function Job:close_stdout_pipe()
-  if self.pipes.stdout and not uv.is_closing(self.pipes.stdout) then
-    self.pipes.stdout:shutdown()
-    return true
-  end
-
-  return false
-end
-
-function Job:close_pipes()
-  return Job.close_stdout_pipe(self), Job.close_stderr_pipe(self), Job.close_stdin_pipe(self)
-end
-
 ---@diagnostic disable-next-line: duplicate-set-field
 function Job:send(s)
   assert_is_a[union("string", "table")](s)
 
-  if not self.handle or not uv.is_active(self.handle) then
-    return false
-  elseif self:is_closing "stdin" then
+  if not self:is_active() then
     return false
   end
 
-  s = is_string(s) and strsplit(s, "\n") or s
-  return uv.write(self.pipes.stdin, s)
+  s = is_table(s) and join(s, "\n") or s
+  return jobs.send(self.job_id, s)
 end
 
 Job.is_running = Job.is_active
@@ -473,7 +210,36 @@ function Job.format_buffer(bufnr, cmd, opts)
   end
 
   local name = Buffer.get_name(bufnr)
-  local j = Job(cmd)
+  opts = dict.merge2(opts, {
+    output = true,
+    on_exit = function(job)
+      Buffer.set_option(bufnr, "modifiable", true)
+      local stdout, stderr = job.output.stdout, job.output.stderr
+      local has_elems = function(x)
+        return is_table(x) and not (#x == 1 and x[1] == "")
+      end
+
+      if job.exit_status ~= 0 then
+        if has_elems(stderr) then
+          tostderr(join(stderr, "\n"))
+        else
+          tostderr("failed to format buffer: " .. name)
+        end
+
+        return
+      end
+
+      if has_elems(stdout) then
+        Buffer.set(bufnr, { 0, -1 }, stdout)
+        vim.cmd "redraw!"
+      elseif has_elems(stderr) then
+        tostderr("failed to format buffer: " .. name)
+        return
+      end
+    end,
+  })
+
+  local j = Job(cmd, opts)
   j.target_buffer = bufnr
   j.target_buffer_name = name
 
@@ -481,46 +247,50 @@ function Job.format_buffer(bufnr, cmd, opts)
     return
   end
 
-  opts = copy(opts)
+  j:start()
 
-  Buffer.save(bufnr)
-
-  return j:start(dict.merge({
-    output = true,
-    on_exit = function(job)
-      Buffer.set_option(bufnr, "modifiable", true)
-
-      if job.exit_status ~= 0 then
-        if #job.output.stderr > 0 then
-          tostderr(join(job.output.stderr, "\n"))
-        end
-        tostderr("failed to format buffer: " .. name)
-      end
-
-      if #job.output.stdout > 0 then
-        Buffer.set(bufnr, { 0, -1 }, job.output.stdout)
-        vim.cmd "redraw!"
-      elseif #job.output.stderr > 0 then
-        tostderr("failed to format buffer: " .. name)
-      end
-    end,
-  }, { opts }))
+  return j
 end
 
-function Job.shell(cmd, opts)
-  assert_is_a.string(cmd)
+function Job:init(cmd, opts)
+  opts = opts or {}
 
-  local j = Job(cmd)
-  if j then
-    return j:start(opts)
+  params {
+    command = { union("string", "table"), cmd },
+    opts = { "table", opts },
+  }
+
+  dict.merge2(self, opts)
+
+  self.cmd = cmd
+  self.output = (opts.show or opts.output) and { stdout = {}, stderr = {}, buffer = false }
+
+  return self
+end
+
+function Job:start()
+  if self:is_running() then
+    return self
   end
-end
 
-vim.api.nvim_create_autocmd({ "ExitPre" }, {
-  pattern = "*",
-  callback = function()
-    dict.each(user.jobs, function(_, obj)
-      obj:stop()
-    end)
-  end,
-})
+  self:_create_on_exit_handler()
+
+  if self.show or self.output then
+    self:_create_output_handlers()
+  end
+
+  if before then
+    before()
+  end
+
+  local handle = jobs.start(self.cmd, self:opts())
+
+  if not handle then
+    error("could not run command: " .. dump(cmd))
+  end
+
+  self.job_id = handle
+  user.jobs[self.job_id] = self
+
+  return self
+end

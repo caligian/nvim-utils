@@ -1,16 +1,7 @@
 require "nvim-utils.Kbd"
 
 Buffer = namespace()
-
-local funs  = list.filter(keys(vim.api), function (x)
-  return x:match('^nvim_buf')
-end)
-
-list.each(funs, function (x)
-  local k = x
-  x = x:gsub('^nvim_buf_', '')
-  Buffer[x] = vim.api[k]
-end)
+Buffer:include(nvim.buf)
 
 --- Is object a Buffer
 --- @param bufnr any
@@ -417,42 +408,42 @@ function Buffer.split(bufnr, direction)
   direction = direction or "s"
 
   local function cmd(s)
-    s = ':' .. s .. " | b " .. bufnr
+    s = ":" .. s .. " | b " .. bufnr
     vim.cmd(s)
   end
 
   local valid = {
-    'vsplit',
-    'split',
-    'topleft_vsplit',
-    'aboveleft_vsplit',
-    'leftabove_vsplit',
-    'belowright_vsplit',
-    'rightbelow_vsplit',
-    'topleft',
-    'aboveleft',
-    'leftabove',
-    'belowright',
-    'rightbelow',
-    'tabnew',
+    "vsplit",
+    "split",
+    "topleft_vsplit",
+    "aboveleft_vsplit",
+    "leftabove_vsplit",
+    "belowright_vsplit",
+    "rightbelow_vsplit",
+    "topleft",
+    "aboveleft",
+    "leftabove",
+    "belowright",
+    "rightbelow",
+    "tabnew",
   }
 
-  if direction == 's' or direction == 'v' then
-    if direction == 's' then
-      direction = 'split'
+  if direction == "s" or direction == "v" then
+    if direction == "s" then
+      direction = "split"
     else
-      direction = 'vsplit'
+      direction = "vsplit"
     end
   end
 
   if not list.contains(valid, direction) then
-    local ok = cmd(direction, {buf = bufnr})
+    local ok = F(direction, { buf = bufnr })
     if not ok then
-      return 'expected valid command or command template with {buf}, got ' .. dump(direction)
+      return "expected valid command or command template with {buf}, got " .. dump(direction)
     end
     vim.cmd(ok)
-  elseif direction:match('_vsplit') then
-    cmd(direction:gsub('([^_]+)_vsplit', 'vert %1'))
+  elseif direction:match "_vsplit" then
+    cmd(direction:gsub("([^_]+)_vsplit", "vert %1"))
   else
     cmd(direction)
   end

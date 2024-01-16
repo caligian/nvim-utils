@@ -20,12 +20,12 @@ build = {
   type = "builtin",
   modules = {
     ["nvim-utils"] = "nvim-utils/init.lua",
+    ["nvim-utils.state"] = "nvim-utils/state.lua",
     ["nvim-utils.telescope_utils"] = "nvim-utils/telescope_utils.lua",
     ["nvim-utils.Path"] = "nvim-utils/Path.lua",
     ["nvim-utils.nvim"] = "nvim-utils/nvim.lua",
     ["nvim-utils.shlex"] = "nvim-utils/shlex.lua",
     ["nvim-utils.logger"] = "nvim-utils/logger.lua",
-    ["nvim-utils.Vimjob"] = "nvim-utils/Vimjob.lua",
     ["nvim-utils.Bookmark"] = "nvim-utils/Bookmark.lua",
     ["nvim-utils.Buffer"] = "nvim-utils/Buffer/Buffer.lua",
     ["nvim-utils.Buffer.float"] = "nvim-utils/Buffer/float.lua",
@@ -39,5 +39,6 @@ build = {
     ["nvim-utils.Kbd"] = "nvim-utils/Kbd.lua",
     ["nvim-utils.Job"] = "nvim-utils/Job.lua",
     ["nvim-utils.Terminal"] = "nvim-utils/Terminal.lua",
+    ["nvim-utils.bootstrap"] = "nvim-utils/bootstrap.lua",
   },
 }

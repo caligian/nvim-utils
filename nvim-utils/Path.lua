@@ -1,6 +1,8 @@
 require "lua-utils.utils"
 require "lua-utils.table"
 
+require "nvim-utils.state"
+
 local lpeg = require "lpeg"
 local lfs = require "lfs"
 Path = dict.merge(namespace(), { lfs })

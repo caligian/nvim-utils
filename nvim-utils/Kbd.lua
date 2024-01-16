@@ -13,8 +13,6 @@ if not Kbd then
   })
 
   Kbd.buffer = namespace()
-
-  dict.get(user, 'kbds', true)
 end
 
 local enable = vim.keymap.set

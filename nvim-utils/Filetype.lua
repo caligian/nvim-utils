@@ -1,8 +1,8 @@
 require "nvim-utils.Autocmd"
+require "nvim-utils.Job"
 require "nvim-utils.Buffer"
 require "nvim-utils.Buffer.Win"
 require "nvim-utils.Kbd"
-require "nvim-utils.Job"
 
 if not Filetype then
   Filetype = class("Filetype", {
@@ -786,25 +786,15 @@ function Filetype:action(bufnr, action, opts)
   name = name .. target
   cmd = is_table(cmd) and join(cmd, " ") or cmd
 
-  local term = Job(cmd)
-  local ok = term:start {
+  local term = Job(cmd, {
     before = function()
       Buffer.save(bufnr)
     end,
     output = true,
-    on_exit = function(job)
-      local lines = job.output.stdout or {}
-      local errs = job.output.stderr or {}
+    show = ':botright split | resize 10 | b {buf}',
+  })
 
-      list.extend(lines, { errs })
-
-      if #lines ~= 0 then
-        local outbuf = Buffer.scratch()
-        Buffer.set(outbuf, { 0, -1 }, lines)
-        Buffer.split(outbuf, "split | resize 10 | b {buf}")
-      end
-    end,
-  }
+  local ok = term:start()
 
   if ok then
     self.jobs[name] = term

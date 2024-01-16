@@ -343,7 +343,7 @@ function BufferGroup:init(name, event, pattern, opts)
   self.name = name
   self.buffers = {}
 
-  vim.api.nvim_create_augroup('BufferGroup', {clear = false})
+  vim.api.nvim_create_augroup("BufferGroup", { clear = false })
 
   self.autocmd = vim.api.nvim_create_autocmd(event, {
     group = "BufferGroup",

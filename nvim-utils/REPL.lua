@@ -4,8 +4,6 @@ if not REPL then
   REPL = class("REPL", { "set_mappings", "main" })
   REPL:include(Terminal)
   REPL.stop_all = nil
-
-  user.repls = {}
 end
 
 function REPL.stop_all()
@@ -301,9 +299,4 @@ function REPL:delete()
   return self
 end
 
-vim.api.nvim_create_autocmd("ExitPre", {
-  pattern = "*",
-  callback = function()
-    REPL.stop_all()
-  end,
-})
+

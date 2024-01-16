@@ -1,4 +1,4 @@
-require 'nvim-utils.Buffer.Win'
+require "nvim-utils.Buffer.Win"
 
 local float = {}
 
@@ -92,7 +92,7 @@ function float.float(bufnr, opts)
       current_height = editor_size[2]
     end
 
-    center = center == true and {0.8, 0.8} or center
+    center = center == true and { 0.8, 0.8 } or center
     local width, height = unpack(center)
     width = math.floor(from_percent(current_width, width, 10))
     height = math.floor(from_percent(current_height, height, 5))

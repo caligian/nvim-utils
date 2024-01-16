@@ -1,3 +1,5 @@
+require "nvim-utils.state"
+
 local enable = vim.api.nvim_create_autocmd
 local disable = vim.api.nvim_del_autocmd
 local getinfo = vim.api.nvim_get_autocmds
@@ -14,7 +16,6 @@ if not Autocmd then
     "buffer",
   })
 
-  user.autocmds = { buffers = {} }
   Autocmd.buffer = namespace()
 end
 

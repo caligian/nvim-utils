@@ -1,3 +1,5 @@
+require "nvim-utils.state"
+
 function vimsize()
   local scratch = vim.api.nvim_create_buf(false, true)
 
@@ -215,7 +217,7 @@ function getpid(pid)
     return false
   end
 
-  local out = system("ps --pid " .. pid .. " | tail -n -1")
+  local out = system("ps --pid " .. pid .. " | grep -Ev 'PID TTY'")
   out = list.map(out, trim)
   out = list.filter(out, function(x)
     return #x ~= 0
@@ -265,3 +267,4 @@ function mkcommand(name, callback, opts)
 
   return use(name, callback, opts)
 end
+
