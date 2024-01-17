@@ -340,7 +340,7 @@ end
 Bookmark.mappings = {
   add_bookmark = {
     "n",
-    "gba",
+    "bm",
     function()
       Bookmark.add_and_save(Buffer.get_name(Buffer.bufnr()), Win.pos(Buffer.winnr(Buffer.current())).row)
     end,
