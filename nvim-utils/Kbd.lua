@@ -254,19 +254,19 @@ function Kbd.loadfile()
 end
 
 function Kbd.require()
-  local src = req2path "core.defaults.kbd"
-  local usersrc = req2path "user.kbd"
+  local src = req2path "core.defaults.kbds"
+  local usersrc = req2path "user.kbds"
   local specs = {}
 
   if usersrc then
-    local config = requirex "core.defaults.kbd"
+    local config = requirex "core.defaults.kbds"
     if is_table(config) then
       dict.merge(specs, { config })
     end
   end
 
   if src then
-    local config = requirex "core.defaults.kbd"
+    local config = requirex "core.defaults.kbds"
     if is_table(config) then
       dict.merge(specs, { config })
     end
