@@ -24,7 +24,6 @@ build = {
     ["nvim-utils.telescope_utils"] = "nvim-utils/telescope_utils.lua",
     ["nvim-utils.Path"] = "nvim-utils/Path.lua",
     ["nvim-utils.nvim"] = "nvim-utils/nvim.lua",
-    ["nvim-utils.shlex"] = "nvim-utils/shlex.lua",
     ["nvim-utils.logger"] = "nvim-utils/logger.lua",
     ["nvim-utils.Bookmark"] = "nvim-utils/Bookmark.lua",
     ["nvim-utils.Buffer"] = "nvim-utils/Buffer/Buffer.lua",
