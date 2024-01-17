@@ -226,8 +226,8 @@ function Kbd.from_dict(specs)
 end
 
 function Kbd.loadfile()
-  local src = req2path "core.defaults.kbd"
-  local usersrc = req2path "user.kbd"
+  local src = req2path "core.defaults.kbds"
+  local usersrc = req2path "user.kbds"
   local specs = {}
 
   if src then

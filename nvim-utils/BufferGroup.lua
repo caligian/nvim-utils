@@ -402,15 +402,15 @@ end
 function BufferGroup.require()
   local specs = {}
 
-  if req2path "core.defaults.buffergroup" then
-    local config = requirex "core.defaults.buffergroup"
+  if req2path "core.defaults.buffer_groups" then
+    local config = requirex "core.defaults.buffer_groups"
     if config and is_table(config) then
       dict.merge(specs, { config })
     end
   end
 
-  if req2path "user.buffergroup" then
-    local config = requirex "user.buffergroup"
+  if req2path "user.buffer_group" then
+    local config = requirex "user.buffer_groups"
     if config and is_table(config) then
       dict.merge(specs, { config })
     end
