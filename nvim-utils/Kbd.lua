@@ -1,19 +1,17 @@
 require "nvim-utils.Autocmd"
 
 --- @class kbd
-if not Kbd then
-  Kbd = class("Kbd", {
-    "require",
-    "loadfile",
-    "main",
-    "from_dict",
-    "buffer",
-    "map",
-    "noremap",
-  })
+Kbd = class("Kbd", {
+  "require",
+  "loadfile",
+  "main",
+  "from_dict",
+  "buffer",
+  "map",
+  "noremap",
+})
 
-  Kbd.buffer = namespace()
-end
+Kbd.buffer = namespace()
 
 local enable = vim.keymap.set
 local delete = vim.keymap.del
@@ -23,16 +21,16 @@ function Kbd:opts()
   return dict.filter(self, function(key, _)
     return strmatch(
       key,
-      "buffer",
-      "nowait",
-      "silent",
-      "script",
-      "expr",
-      "unique",
-      "noremap",
-      "desc",
-      "callback",
-      "replace_keycodes"
+      "^buffer$",
+      "^nowait$",
+      "^silent$",
+      "^script$",
+      "^expr$",
+      "^unique$",
+      "^noremap$",
+      "^desc$",
+      "^callback$",
+      "^replace_keycodes$"
     )
   end)
 end
@@ -217,8 +215,9 @@ function Kbd.from_dict(specs)
       opts.desc = key
     end
 
-    value[4] = opts
+    opts.name = key
 
+    value[4] = opts
     out[key] = Kbd.map(unpack(value))
   end
 
@@ -275,6 +274,4 @@ function Kbd.require()
   return Kbd.from_dict(specs)
 end
 
-function Kbd.main()
-  return Kbd.require()
-end
+Kbd.main = Kbd.require

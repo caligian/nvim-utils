@@ -16,7 +16,7 @@ function Plugin:init(name, opts)
     return
   end
 
-  if is_string(name) and user.plugins[name] and Plugin.is_a(user.plugins[name]) then
+  if is_string(name) and user.plugins[name] then
     return user.plugins[name]
   elseif is_table(name) then
     local given_opts = copy(name)
@@ -122,7 +122,7 @@ function Plugin:require()
 
   builtin = luapath and requirex("core.plugins." .. name)
   userconfig = userluapath and requirex("user.plugins." .. name)
-  local plug = Plugin(name)
+  local plug = self
 
   if is_table(builtin) and is_table(userconfig) then
     dict.merge(plug, { builtin, userconfig })
@@ -138,47 +138,26 @@ function Plugin:require()
 end
 
 function Plugin:configure()
-  if self.setup then
-    vim.schedule(function()
+  if self.name == "colorscheme" or self.name == "statusline" then
+    self:require()
+
+    if self.setup then
       self:setup()
+    end
+
+    self:set_autocmds()
+  else
+    vim.schedule(function()
+      self:require()
+
+      if self.setup then
+        self:setup()
+      end
+
+      self:set_autocmds()
+      self:set_mappings()
     end)
   end
-
-  vim.schedule(function()
-    self:set_autocmds()
-    self:set_mappings()
-  end)
-
-  return self
-end
-
-function Plugin.loadfile_all()
-  local out = {}
-
-  list.each(Plugin.list(), function(x)
-    local m = requirem("core.plugins." .. x)
-    if is_table(m) then
-      out[x] = Plugin(x, m)
-      out[x]:loadfile()
-    end
-  end)
-
-  return out
-end
-
-function Plugin.require_all()
-  local out = {}
-
-  list.each(Plugin.list(), function(x)
-    local m = requirem("core.plugins." .. x)
-
-    if is_table(m) then
-      out[x] = Plugin(x, m)
-      out[x]:require()
-    end
-  end)
-
-  return out
 end
 
 local function _set_autocmds(self, autocmds)
@@ -196,7 +175,7 @@ local function _set_autocmds(self, autocmds)
 end
 
 function Plugin:set_autocmds(autocmds)
-  return pcall_warn(_set_autocmds, self, autocmds)
+  _set_autocmds(self, autocmds or self.autocmds or {})
 end
 
 local function _set_mappings(self, mappings)
@@ -230,19 +209,8 @@ local function _set_mappings(self, mappings)
 end
 
 function Plugin:set_mappings(mappings)
-  return pcall_warn(_set_mappings, self, mappings)
-end
-
-local function _configure_all()
-  list.each(Plugin.list(), function(x)
-    local plug = Plugin(x)
-    plug:require()
-    plug:configure()
-  end)
-end
-
-function Plugin.configure_all()
-  return pcall_warn(_configure_all)
+  mappings = mappings or self.mappings or {}
+  _set_mappings(self, mappings)
 end
 
 function Plugin.lazy_spec()
@@ -257,8 +225,6 @@ function Plugin.lazy_spec()
     function spec.config()
       local ok, msg = pcall(function()
         local plug = Plugin(name)
-
-        plug:require()
         plug:configure()
 
         if conf and is_function(conf) then
