@@ -3,9 +3,12 @@ local buf = Buffer
 local path = Path
 
 function utils.resolve(name)
-  assert_is_a(name, union('Filetype', 'string'))
+  assert_is_a(name, union('Filetype', 'string', 'number'))
+
   if typeof(name) == 'Filetype' then
     return name
+  elseif is_number(name) then
+    name = Buffer.get_option(name, 'filetype')
   end
 
   return user.filetypes[name]

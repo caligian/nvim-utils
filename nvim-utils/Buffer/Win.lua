@@ -1,10 +1,10 @@
 Win = namespace()
 
 Winid = namespace()
-Winid:include(nvim.win)
+Winid:include_module(nvim.win)
 
 Tabpage = namespace()
-Tabpage:include(nvim.tabpage)
+Tabpage:include_module(nvim.tabpage)
 
 local call = vim.api.nvim_win_call
 wrap = identity

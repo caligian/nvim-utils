@@ -2,7 +2,7 @@ require "nvim-utils.Terminal"
 
 if not REPL then
   REPL = class("REPL", { "set_mappings", "main" })
-  REPL:include(Terminal)
+  REPL:include_module(Terminal)
   REPL.stop_all = nil
 end
 
