@@ -37,6 +37,7 @@ end
 
 function hex2rgb(hex)
   hex = hex:gsub("#", "")
+
   return tonumber("0x" .. hex:sub(1, 2)), tonumber("0x" .. hex:sub(3, 4)), tonumber("0x" .. hex:sub(5, 6))
 end
 
@@ -146,16 +147,17 @@ function is_light(hex_or_r, g, b)
 
   if g then
     r = hex_or_r
-    local hsp = 0.299 * (r * r) + 0.587 * (g * g) + 0.114 * (b * b)
+    local hsp = (0.299 * (r * r)) + (0.587 * (g * g)) + (0.114 * (b * b))
+    local C =math.pow(127.5, 2) 
 
-    if hsp > 127.5 then
-      return false
+    if hsp > C then
+      return true
     end
 
-    return true
+    return false
   end
 
-  return is_dark(hex2rgb(hex_or_r))
+  return is_light(hex2rgb(hex_or_r))
 end
 
 function is_dark(...)
