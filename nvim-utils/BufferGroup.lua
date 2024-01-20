@@ -3,7 +3,7 @@ require "nvim-utils.Kbd"
 if not BufferGroup then
   BufferGroup = class(
     "BufferGroup",
-    { "loadfile", "require", "main", "from_dict", "telescope_list_groups_for_buffer", "telescope_list_groups" }
+    { "loadfile", "require", "main", "from_dict", "list_groups_for_buffer", "list_groups" }
   )
 end
 
@@ -68,7 +68,7 @@ function BufferGroup:exclude_buffer(bufnr)
   dict.unset(user.buffers, { bufnr, "buffer_groups", self.name })
 end
 
-function BufferGroup.telescope_list_groups()
+function BufferGroup.list_groups()
   groups = keys(user.buffer_groups)
 
   if #groups == 0 then
@@ -100,7 +100,7 @@ function BufferGroup.telescope_list_groups()
   }
 end
 
-function BufferGroup.telescope_list_groups_for_buffer(bufnr)
+function BufferGroup.list_groups_for_buffer(bufnr)
   if not Buffer.exists(bufnr) then
     return
   elseif not user.buffers[bufnr] or not user.buffers[bufnr].buffer_groups then
@@ -137,7 +137,7 @@ function BufferGroup.telescope_list_groups_for_buffer(bufnr)
   }
 end
 
-function BufferGroup:telescope_list_buffers()
+function BufferGroup:list_buffers()
   local ls = keys(self.buffers)
   if #ls == 0 then
     return
@@ -161,7 +161,7 @@ function BufferGroup:telescope_list_buffers()
 end
 
 local function create_buffer_picker(self)
-  local ls = BufferGroup.telescope_list_buffers(self)
+  local ls = BufferGroup.list_buffers(self)
 
   if not ls then
     return
@@ -197,7 +197,7 @@ function BufferGroup:create_buffer_picker()
   local ls
 
   if is_number(self) then
-    ls = BufferGroup.telescope_list_groups_for_buffer(self)
+    ls = BufferGroup.list_groups_for_buffer(self)
 
     if not ls then
       return
@@ -253,7 +253,7 @@ function BufferGroup.run_main_picker()
 end
 
 function BufferGroup.create_main_picker()
-  local groups = BufferGroup.telescope_list_groups()
+  local groups = BufferGroup.list_groups()
   if not groups then
     return
   end
