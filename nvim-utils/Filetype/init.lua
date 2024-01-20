@@ -266,8 +266,12 @@ function M:setup()
   self:set_buf_opts()
   self:set_commands()
   self:set_autocmds()
-  self:set_mappings()
-  self:set_mappings(kbds)
+
+  pcall_debug(function ()
+    self:set_mappings()
+    self:set_mappings(kbds)
+  end) 
+
   self:setup_lsp()
 end
 
