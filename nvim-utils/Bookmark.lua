@@ -4,7 +4,7 @@ require "nvim-utils.Buffer.Win"
 require "nvim-utils.Autocmd"
 
 Bookmark = namespace()
-Bookmark.path = user.paths.bookmarks or (vim.fn.stdpath('data') .. '/bookmarks.lua')
+Bookmark.path = user.paths.bookmarks or (vim.fn.stdpath "data" .. "/bookmarks.lua")
 
 function Bookmark.dump()
   local fh = io.open(Bookmark.path, "w")
@@ -269,9 +269,9 @@ function Bookmark.create_picker()
       if line_picker then
         line_picker:find()
       elseif vim.fn.bufnr(obj.path) then
-        vim.cmd('b ' .. obj.path)
+        vim.cmd("b " .. obj.path)
       else
-        vim.cmd('e ' .. obj.path)
+        vim.cmd("e " .. obj.path)
       end
     else
       Bookmark.open(obj.path, "s")

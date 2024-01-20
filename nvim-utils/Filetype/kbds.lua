@@ -70,7 +70,7 @@ local mappings = {
   },
   workspace_compile = {
     "n",
-    "<leader>mf",
+    "<leader>mc",
     compile "workspace",
     {},
   },
