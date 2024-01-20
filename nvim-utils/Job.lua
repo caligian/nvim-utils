@@ -4,29 +4,29 @@ local jobs = {
   start = vim.fn.jobstart,
   stop = vim.fn.jobstop,
   close = vim.fn.chanclose,
-  getpid = vim.fn.getpid,
+  getpid = vim.fn.jobpid,
   send = vim.fn.chansend,
 }
 
 Job = class("Job", { "shell", "format_buffer" })
 
-function Job:opts(opts)
+function Job.get_opts(opts)
   return {
-    clear_env = self.clear_env,
-    cwd = self.cwd,
-    detach = self.detach,
-    env = self.env,
-    height = self.height,
-    on_exit = self.on_exit,
-    on_stdout = self.on_stdout,
-    on_stderr = self.on_stderr,
-    overlapped = self.overlapped,
-    pty = self.pty,
-    rpc = self.rpc,
-    stderr_buffered = self.stderr_buffered,
-    stdout_buffered = self.stdout_buffered,
-    stdin = self.stdin,
-    width = self.width,
+    clear_env = opts.clear_env,
+    cwd = opts.cwd,
+    detach = opts.detach,
+    env = opts.env,
+    height = opts.height,
+    on_exit = opts.on_exit,
+    on_stdout = opts.on_stdout,
+    on_stderr = opts.on_stderr,
+    overlapped = opts.overlapped,
+    pty = opts.pty,
+    rpc = opts.rpc,
+    stderr_buffered = opts.stderr_buffered,
+    stdout_buffered = opts.stdout_buffered,
+    stdin = opts.stdin,
+    width = opts.width,
   }
 end
 
@@ -164,7 +164,7 @@ function Job:getpid()
     return false
   end
 
-  return getpid(job.getpid(self.job_id))
+  return getpid(jobs.getpid(self.job_id))
 end
 
 function Job:is_active()
@@ -283,7 +283,8 @@ function Job:start()
     before()
   end
 
-  local handle = jobs.start(self.cmd, self:opts())
+  local opts = self:get_opts()
+  local handle = jobs.start(self.cmd, opts)
 
   if not handle then
     error("could not run command: " .. dump(cmd))

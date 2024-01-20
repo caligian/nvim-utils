@@ -36,10 +36,11 @@ end
 
 function requirex(require_string)
   local ok, msg = pcall_warn(require, require_string)
+
   if not ok then
     return ok, msg
   else
-    return msg
+    return ok
   end
 end
 
@@ -91,6 +92,16 @@ function loadfilex(path)
   end
 
   return ok--[[@as function]]()
+end
+
+function reqloadfile(path)
+  path = req2path(path)
+
+  if not path then
+    return
+  end
+
+  return loadfile(path)
 end
 
 function reqloadfilex(path)
@@ -157,5 +168,3 @@ function mkcommand(name, callback, opts)
 
   return use(name, callback, opts)
 end
-
-

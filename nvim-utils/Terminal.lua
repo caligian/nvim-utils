@@ -319,7 +319,6 @@ function Terminal:stop()
   return job_id
 end
 
-
 function Terminal:delete()
   local job_id = self:stop()
   if not job_id then
@@ -355,4 +354,3 @@ end
 
 Terminal.close = Terminal.stop
 Terminal.is_active = Terminal.is_running
-

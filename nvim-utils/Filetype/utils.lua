@@ -3,12 +3,16 @@ local buf = Buffer
 local path = Path
 
 function utils.resolve(name)
-  assert_is_a(name, union('Filetype', 'string', 'number'))
+  assert_is_a(name, union("Filetype", "string", "number"))
 
-  if typeof(name) == 'Filetype' then
+  if typeof(name) == "Filetype" then
     return name
   elseif is_number(name) then
-    name = Buffer.get_option(name, 'filetype')
+    if Buffer.exists(name) then
+      name = Buffer.get_option(name, "filetype")
+    else
+      return
+    end
   end
 
   return user.filetypes[name]
@@ -16,13 +20,15 @@ end
 
 function utils.query(ft, attrib, f)
   local obj = utils.resolve(ft)
+
   if not obj then
-    return 'invalid filetype ' .. dump(ft)
+    return "invalid filetype " .. dump(ft)
   end
 
   obj = dict.get(obj, totable(attrib))
+
   if not obj then
-    return string.format('%s: invalid attribute: %s', dump(ft), dump(attrib))
+    return string.format("%s: invalid attribute: %s", dump(ft), dump(attrib))
   end
 
   if f then
@@ -87,6 +93,27 @@ function utils.get_workspace(bufnr, pats, maxdepth, _depth)
   else
     return find_workspace(bufname, pats, maxdepth, _depth)
   end
+end
+
+local function get_name(x)
+  return Path.basename(x):gsub("%.lua", "")
+end
+
+function utils.list_configs()
+  local core_dir = req2path("core.filetype"):gsub("/%.lua", "")
+  local user_dir = req2path "user.filetype"
+  local core_files = Path.get_files(core_dir)
+  local core_names = list.map(core_files, get_name)
+
+  if user_dir then
+    user_dir = user_dir:gsub("/%.lua", "")
+    local user_files = Path.get_files(user_dir)
+    local user_names = list.map(user_files, get_name)
+
+    return list.union(core_names, user_names)
+  end
+
+  return core_names
 end
 
 return utils

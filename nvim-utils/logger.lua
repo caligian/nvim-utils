@@ -1,6 +1,6 @@
 require "logging.file"
 
-local log_path = Path.join(os.getenv "HOME", ".local", "share", "nvim", "messages")
+local log_path = table.concat({ os.getenv "HOME", ".local", "share", "nvim", "messages" }, "/")
 
 logger = logging.file {
   filename = log_path,

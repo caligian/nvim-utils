@@ -241,5 +241,3 @@ function Autocmd.main()
 end
 
 return Autocmd
-
-

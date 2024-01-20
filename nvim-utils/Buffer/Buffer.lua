@@ -1,6 +1,6 @@
 require "nvim-utils.Kbd"
 
-Buffer = namespace 'Buffer' 
+Buffer = namespace "Buffer"
 Buffer:include_module(nvim.buf)
 
 --- Is object a Buffer

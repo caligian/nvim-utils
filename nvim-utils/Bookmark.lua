@@ -3,23 +3,16 @@ require "nvim-utils.Buffer"
 require "nvim-utils.Buffer.Win"
 require "nvim-utils.Autocmd"
 
-dict.get(_G, { "user", "bookmarks" }, true)
-
-local BOOKMARKS = user.bookmarks
-local BUFFERS = user.buffers
-
 Bookmark = namespace()
-Bookmark.path = Path.join(os.getenv "HOME", ".bookmarks.json")
-
-local bookmarks = user.bookmarks
+Bookmark.path = user.paths.bookmarks or (vim.fn.stdpath('data') .. '/bookmarks.lua')
 
 function Bookmark.dump()
   local fh = io.open(Bookmark.path, "w")
 
   if fh then
-    bookmarks = BOOKMARKS
-    bookmarks = dump(bookmarks)
+    local bookmarks = dump(user.bookmarks)
     fh:write("return " .. bookmarks)
+    fh:close()
 
     return bookmarks
   end
@@ -29,24 +22,21 @@ function Bookmark.load()
   local fh = io.open(Bookmark.path, "r")
 
   if fh then
-    bookmarks = fh:read "*a"
+    local bookmarks = fh:read "*a"
     bookmarks = loadstring(bookmarks)
-
-    local ok, msg = pcall(bookmarks)
-    if ok then
-      user.bookmarks = msg
-      BOOKMARKS = user.bookmarks
-
-      return BOOKMARKS
-    else
-      user.bookmarks = {}
-      BOOKMARKS = user.bookmarks
-
-      return BOOKMARKS
+    if bookmarks then
+      local ok = bookmarks()
+      if is_table(ok) then
+        user.bookmarks = ok
+      end
     end
 
-    return bookmarks
+    fh:close()
+  else
+    user.bookmarks = {}
   end
+
+  return user.bookmarks
 end
 
 function Bookmark:__call()
@@ -106,6 +96,7 @@ end
 
 function Bookmark.add_and_save(file_path, lines, desc)
   local ok = Bookmark.add(file_path, lines, desc)
+
   if not ok then
     return
   end
@@ -273,11 +264,14 @@ function Bookmark.create_picker()
 
   function mod.default_action(prompt_bufnr)
     local obj = user.telescope:selected(prompt_bufnr)
-
     if obj.file then
       local line_picker = Bookmark.create_line_picker(obj.path)
       if line_picker then
         line_picker:find()
+      elseif vim.fn.bufnr(obj.path) then
+        vim.cmd('b ' .. obj.path)
+      else
+        vim.cmd('e ' .. obj.path)
       end
     else
       Bookmark.open(obj.path, "s")

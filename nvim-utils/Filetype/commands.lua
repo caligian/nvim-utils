@@ -1,5 +1,5 @@
 -- local utils = require 'nvim-utils.Filetype.utils'
-local utils = loadfile "utils.lua"()
+local utils = require "nvim-utils.Filetype.utils"
 local mod = {}
 
 --------------------------------------------------
@@ -152,15 +152,21 @@ end
 --- @param cmd_type "repl" | "compile" | "build" | "test" | "format"
 --- @param cmd command | Command
 local function validate(cmd_type, cmd)
-  assert(strmatch(cmd_type, "repl", "compile", "build", "test", "format"))
+  if not strmatch(cmd_type, "repl", "compile", "build", "test", "format") then
+    error(dump { "repl", "compile", "build", "test", "format" })
+  elseif is_string(cmd) then
+    return { buffer = cmd }
+  end
 
   local sig = union("string", "function", "table")
+
   local common = {
     __extra = true,
     ["buffer?"] = sig,
     ["workspace?"] = sig,
     ["dir?"] = sig,
   }
+
   local validators = {
     repl = {
       __extra = true,
@@ -191,12 +197,16 @@ end
 --- @param cmd_for string "buffer" | "workspace" | "dir"
 --- @return (string|get_command_return)?
 function mod.get_command(bufnr, cmd_type, spec, cmd_for)
+  if not spec then
+    return
+  end
+
   validate(cmd_type, spec)
 
   spec = is_string(spec) and { buffer = spec } or spec
 
   if cmd_for then
-    assert(spec[cmd_for], "expected any of buffer, workspace, dir, got " .. dump(cmd_for))
+    assert(spec[cmd_for], cmd_for .. ": command does not exist for " .. cmd_type)
 
     spec = { [cmd_for] = spec[cmd_for] }
     local ok = get_command(bufnr, spec)
@@ -212,7 +222,12 @@ end
 --- @param spec command | Command
 --- @return table?
 function mod.get_opts(spec)
+  if not spec then
+    return
+  end
+
   spec = is_string(spec) and { buffer = spec } or spec
+
   return dict.filter_unless(spec --[[@as table]], function(key, _)
     return strmatch(key, "^buffer$", "^workspace$", "^dir$")
   end)
@@ -224,7 +239,12 @@ end
 --- @param cmd_for string "buffer" | "workspace" | "dir"
 --- @return (string|get_command_return)?, table?
 function mod.get_command_and_opts(bufnr, cmd_type, spec, cmd_for)
+  if not spec then
+    return
+  end
+
   local cmd = mod.get_command(bufnr, cmd_type, spec, cmd_for)
+
   if not cmd then
     return
   end
@@ -233,4 +253,4 @@ function mod.get_command_and_opts(bufnr, cmd_type, spec, cmd_for)
   return cmd, opts
 end
 
-return cmd
+return mod

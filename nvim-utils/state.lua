@@ -82,4 +82,4 @@ nvim = mtset(nvim, {
   end,
 })
 
-require 'nvim-utils.logger'
+require "nvim-utils.logger"

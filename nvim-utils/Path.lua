@@ -175,39 +175,16 @@ end
 
 Path.children = Path.ls
 
-function Path.get_dirs(p)
-  local fs = Path.ls(p)
-  if not fs then
-    return
-  end
-
-  p = p:gsub("[/\\]$", "")
-
-  return list.filter(fs, function(x)
-    x = p .. "/" .. x
-    if Path.is_dir(x) then
-      return true
-    end
-  end, function(x)
-    return p .. "/" .. x
-  end)
-end
-
 function Path.get_files(p)
   local fs = Path.ls(p)
   if not fs then
     return
   end
 
-  p = p:gsub("[/\\]$", "")
-
   return list.filter(fs, function(x)
-    x = p .. "/" .. p
-    if not Path.is_dir(x) then
+    if Path.is_file(x) then
       return true
     end
-  end, function(x)
-    return p .. "/" .. x
   end)
 end
 

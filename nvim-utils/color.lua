@@ -148,7 +148,7 @@ function is_light(hex_or_r, g, b)
   if g then
     r = hex_or_r
     local hsp = (0.299 * (r * r)) + (0.587 * (g * g)) + (0.114 * (b * b))
-    local C =math.pow(127.5, 2) 
+    local C = math.pow(127.5, 2)
 
     if hsp > C then
       return true
