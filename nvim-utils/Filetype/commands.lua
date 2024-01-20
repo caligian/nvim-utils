@@ -142,7 +142,7 @@ local function get_command(bufnr, spec)
     local templ = template(cmd, { path = p })
 
     if templ then
-      res[k] = {p, templ}
+      res[k] = { p, templ }
     end
   end)
 

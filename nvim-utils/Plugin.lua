@@ -232,4 +232,3 @@ end
 function Plugin.main()
   Plugin.setup_lazy()
 end
-
