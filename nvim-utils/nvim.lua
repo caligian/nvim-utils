@@ -18,6 +18,7 @@ end
 
 function tostderr(...)
   for _, s in ipairs { ... } do
+    s = not is_string(s) and dump(s) or s
     vim.api.nvim_err_writeln(s)
   end
 end
@@ -33,17 +34,12 @@ function system(...)
   return vim.fn.systemlist(...)
 end
 
-function requirex(require_string, do_assert)
-  local ok, out = pcall(require, require_string)
-
-  if ok then
-    return out
-  end
-
-  logger:debug(out)
-
-  if do_assert then
-    error(out)
+function requirex(require_string)
+  local ok, msg = pcall_warn(require, require_string)
+  if not ok then
+    return ok, msg
+  else
+    return msg
   end
 end
 
@@ -53,84 +49,6 @@ function glob(d, expr, nosuf, alllinks)
 end
 
 --- Only works for user and doom dirs
-function loadfilex(s)
-  s = strsplit(s, "%.")
-  local fname
-
-  local function _loadfile(p)
-    local loaded
-    if Path.is_dir(p) then
-      loaded = loadfile(Path.join(p, "init.lua"))
-    else
-      p = p .. ".lua"
-      loaded = loadfile(p)
-    end
-
-    return loaded and loaded()
-  end
-
-  if s[1] == "user" then
-    return _loadfile(Path.join(os.getenv "HOME", ".nvim", unpack(s)))
-  elseif s[1] then
-    return _loadfile(Path.join(vim.fn.stdpath "config", "lua", unpack(s)))
-  end
-end
-
-local function process_input(key, value)
-  local out = {}
-  local default, completion, cancelreturn, prompt, default, highlight, post, required
-  required = value.required
-  post = value.post
-  prompt = (value.prompt or value[1] or key) .. " > "
-  default = value.default or value[2]
-  cancelreturn = value.cancelreturn
-  highlight = value.highlight
-  completion = value[3] or value.completion
-
-  local opts = {
-    prompt = prompt,
-    default = default,
-    completion = completion,
-    cancelreturn = cancelreturn,
-    highlight = highlight,
-  }
-
-  local userint = trim(vim.fn.input(opts))
-
-  if #userint == 0 then
-    userint = false
-  else
-    userint = tonumber(userint) or userint
-  end
-
-  if post then
-    userint = post(userint)
-  end
-
-  if required then
-    assert(userint, "no input passed for non-optional key " .. key)
-  end
-
-  out[key] = value
-
-  return out
-end
-
-function input(spec)
-  if is_a.table(spec) then
-    local res = {}
-
-    for key, value in pairs(spec) do
-      local out = process_input(key, value)
-      dict.merge(res, { out })
-    end
-
-    return res
-  else
-    return process_input(1, unpack(spec))
-  end
-end
-
 function whereis(bin)
   local out = vim.fn.system("whereis " .. bin .. [[ | cut -d : -f 2- | sed -r "s/(^ *| *$)//mg"]])
 
@@ -166,50 +84,22 @@ function req2path(s, isfile)
   end
 end
 
-function requirem(s)
-  if not s:match "^core" then
-    return
+function loadfilex(path)
+  local ok, msg = loadfile(path)
+  if not ok then
+    logger:warn(msg)
   end
 
-  if s:match "^core%.utils" then
-    return
-  end
-
-  local p = s:gsub("^core", "user")
-  if not req2path(s) then
-    return
-  end
-
-  local builtin, builtin_tp = req2path(s)
-  local _user, user_tp = req2path(p)
-
-  if not builtin and not _user then
-    return
-  elseif builtin_tp == "dir" and Path.exists(builtin .. "/init.lua") then
-    builtin = requirex(s)
-  elseif builtin_tp then
-    builtin = requirex(s)
-  end
-
-  if user_tp == "dir" and Path.exists(Path.join(_user, "init.lua")) then
-    _user = requirex(s)
-  else
-    _user = requirex(s)
-  end
-
-  if is_table(builtin) and is_table(_user) then
-    return dict.merge(copy(builtin), { _user })
-  end
-
-  return builtin
+  return ok--[[@as function]]()
 end
 
-function reqloadfile(req_path)
-  local tp
-  req_path, tp = req2path(req_path)
-  if req_path and tp == "file" then
-    return loadfile(req_path)()
+function reqloadfilex(path)
+  path = req2path(path)
+  if not path then
+    return
   end
+
+  return loadfilex(path)
 end
 
 function getpid(pid)
@@ -267,4 +157,5 @@ function mkcommand(name, callback, opts)
 
   return use(name, callback, opts)
 end
+
 

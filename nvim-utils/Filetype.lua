@@ -927,14 +927,14 @@ function Filetype:set_mappings()
 end
 
 function Filetype.main(use_loadfile)
-  local configured = Filetype.list()
+  vim.schedule(function()
+    local configured = Filetype.list()
 
-  list.each(configured, function(x)
-    local obj = Filetype(x)
-    obj:setup(use_loadfile)
-  end)
+    list.each(configured, function(x)
+      local obj = Filetype(x)
+      obj:setup(use_loadfile)
+    end)
 
-  vim.defer_fn(function()
     Kbd.map("n", "<leader>mb", function()
       local buf = Buffer.current()
       Filetype(buf):action(buf, "build", { workspace = true })
@@ -1024,5 +1024,5 @@ function Filetype.main(use_loadfile)
         ft:format_dir(buf)
       end
     end, "format dir")
-  end, 50)
+  end)
 end

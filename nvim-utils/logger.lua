@@ -40,14 +40,13 @@ make_logger "error"
 
 local function make_pcall_wrapper(name)
   local function _pcall(f, ...)
-    local args = { ... }
-    local ok, msg = pcall(function()
-      return f(unpack(args))
-    end)
+    local ok, msg = pcall(f, ...)
+
     if not ok then
       msg = msg or "[WARN]"
       msg = sprintf("-- START --\nArguments: %s\n%s\n-- END --", dump { ... }, msg)
       logger[name](logger, msg)
+      return nil, msg
     end
 
     return msg

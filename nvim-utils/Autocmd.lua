@@ -5,19 +5,17 @@ local disable = vim.api.nvim_del_autocmd
 local getinfo = vim.api.nvim_get_autocmds
 local create_augroup = vim.api.nvim_create_augroup
 
-if not Autocmd then
-  Autocmd = class("Autocmd", {
-    "loadfile",
-    "require",
-    "main",
-    "from_dict",
-    "map",
-    "find",
-    "buffer",
-  })
+Autocmd = class("Autocmd", {
+  "loadfile",
+  "require",
+  "main",
+  "from_dict",
+  "map",
+  "find",
+  "buffer",
+})
 
-  Autocmd.buffer = namespace()
-end
+Autocmd.buffer = namespace()
 
 function Autocmd:init(event, opts)
   local pattern = opts.pattern
@@ -243,3 +241,5 @@ function Autocmd.main()
 end
 
 return Autocmd
+
+

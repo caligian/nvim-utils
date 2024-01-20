@@ -53,7 +53,6 @@ function Kbd:init(mode, ks, callback, rest)
   local localleader = rest.localleader
   local leader = rest.leader
   local name = rest.name
-  local group = rest.group or "Kbd"
   local desc = rest.desc
 
   if prefix and (localleader or leader) then

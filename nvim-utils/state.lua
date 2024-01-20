@@ -81,3 +81,5 @@ nvim = mtset(nvim, {
     return vim.fn[fn] or vim[fn]
   end,
 })
+
+require 'nvim-utils.logger'
