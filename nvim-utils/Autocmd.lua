@@ -24,12 +24,12 @@ function Autocmd:init(event, opts)
   local buffers = {}
   local name = opts.name
   local cb = opts.callback
-  local callback
   local once = opts.once
   local nested = opts.nested
   local command = opts.command
   local desc = opts.desc
   local buf = opts.buffer
+  local callback
 
   if name then
     if group then
@@ -42,7 +42,7 @@ function Autocmd:init(event, opts)
   assert(cb or command, "expected command or callback")
 
   if not command then
-    function callback(au_opts)
+    callback = function(au_opts)
       cb(au_opts)
 
       self.buffers[au_opts.buf] = true

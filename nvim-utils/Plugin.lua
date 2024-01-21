@@ -87,8 +87,8 @@ function Plugin:loadfile()
     return
   end
 
-  builtin = luapath and loadfile(luapath)
-  userconfig = userluapath and loadfile(userluapath)
+  builtin = luapath and loadfilex(luapath)
+  userconfig = userluapath and loadfilex(userluapath)
 
   local plug = Plugin(name)
   local _, okuserconfig
@@ -138,14 +138,24 @@ function Plugin:require()
 end
 
 function Plugin:configure()
-  self:require()
+  xpcall(function()
+    self:require()
 
-  if self.setup then
-    self:setup()
-  end
+    if self.setup then
+      self:setup()
+    end
 
-  self:set_autocmds()
-  self:set_mappings()
+    self:set_autocmds()
+    self:set_mappings()
+  end, function(msg)
+    logger:warn(msg)
+    logger:debug(dump {
+      obj = copy(self),
+      autocmds = self.autocmds or {},
+      mappings = self.mappings or {},
+      spec = self.spec or {},
+    })
+  end)
 end
 
 local function _set_autocmds(self, autocmds)
@@ -210,12 +220,12 @@ function Plugin.lazy_spec()
     assert_is_a(spec[1], "string")
 
     local conf = spec.config
+
     function spec.config()
       local plug = Plugin(name)
       plug:configure()
-
       if conf and is_function(conf) then
-        conf()
+        pcall(conf)
       end
     end
 
@@ -232,3 +242,5 @@ end
 function Plugin.main()
   Plugin.setup_lazy()
 end
+
+

@@ -1,4 +1,5 @@
 require "nvim-utils.Terminal"
+require "nvim-utils.Filetype"
 
 REPL = class("REPL", { "set_mappings", "main" }, { parent = Terminal })
 REPL.stop_all = nil
@@ -87,10 +88,10 @@ function REPL:init(bufnr, opts)
     dict.merge(opts, { _opts })
   end
 
+  self.cmd = cmd[2]
   self.filetype = ft
   self.src = cmd[1]
   cmd = cmd[2]
-  cmd = template(cmd, { path = self.src }) or cmd
   self.name = self.src
   user.repls[self.name] = self
   self.type = given_type
