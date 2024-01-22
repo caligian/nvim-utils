@@ -1,10 +1,8 @@
-require "nvim-utils.Buffer.Win"
-
 local float = {}
 
 --------------------------------------------------
-local function from_percent(current, width, min)
-  current = current or vim.fn.winwidth(0)
+local function from_percent(bufnr, current, width, min)
+  current = current or vim.fn.winwidth(vim.fn.bufwinnr(bufnr))
   width = width or 0.5
 
   assert(width ~= 0, "width cannot be 0")
@@ -56,8 +54,9 @@ local function vimsize()
   vim.api.nvim_buf_call(scratch, function()
     vim.cmd "tabnew"
     local tabpage = vim.fn.tabpagenr()
-    width = vim.fn.winwidth(0)
-    height = vim.fn.winheight(0)
+    local winnr = vim.fn.bufwinnr(scratch)
+    width = vim.fn.winwidth(winnr)
+    height = vim.fn.winheight(winnr)
     vim.cmd("tabclose " .. tabpage)
   end)
 
@@ -77,8 +76,9 @@ function float.float(bufnr, opts)
   opts.style = opts.style or "minimal"
   opts.border = opts.border or "single"
   local editor_size = vimsize()
-  local current_width = Win.width()
-  local current_height = Win.height()
+  local winnr = vim.fn.bufwinnr(bufnr)
+  local current_width = vim.fn.winwidth(winnr)
+  local current_height = vim.fn.winheight(winnr)
   opts.width = opts.width or current_width
   opts.height = opts.height or current_height
   opts.relative = opts.relative or "editor"
@@ -94,8 +94,8 @@ function float.float(bufnr, opts)
 
     center = center == true and { 0.8, 0.8 } or center
     local width, height = unpack(center)
-    width = math.floor(from_percent(current_width, width, 10))
-    height = math.floor(from_percent(current_height, height, 5))
+    width = math.floor(from_percent(bufnr, current_width, width, 10))
+    height = math.floor(from_percent(bufnr, current_height, height, 5))
     local col = (current_width - width) / 2
     local row = (current_height - height) / 2
     opts.width = width
@@ -111,7 +111,7 @@ function float.float(bufnr, opts)
     panel = panel == true and 0.3 or panel
     opts.row = 0
     opts.col = 1
-    opts.width = from_percent(current_width, panel, 5)
+    opts.width = from_percent(bufnr, current_width, panel, 5)
     opts.height = current_height
 
     if reverse then
@@ -127,7 +127,7 @@ function float.float(bufnr, opts)
 
     opts.col = 0
     opts.row = opts.height - dock
-    opts.height = from_percent(current_height, dock, 5)
+    opts.height = from_percent(bufnr, current_height, dock, 5)
     opts.width = current_width > 5 and current_width - 2 or current_width
 
     if reverse then

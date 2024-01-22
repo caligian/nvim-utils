@@ -66,7 +66,7 @@ local function init(self, bufnr_or_name, scratch, listed)
   self.name = vim.fn.bufname(bufnr)
   self.mappings = {}
 
-  if self.scratch then
+  if self.is_scratch then
     vim.api.nvim_buf_set_keymap(bufnr, "n", "q", ":hide<CR>", { desc = "hide buffer", noremap = true })
     vim.api.nvim_buf_set_option(bufnr, "bufhidden", "wipe")
   end

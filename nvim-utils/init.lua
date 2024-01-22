@@ -8,7 +8,6 @@ return function(opts)
 
   require "nvim-utils.Path"
   require "nvim-utils.logger"
-  require "nvim-utils.nvim"
   require "nvim-utils.color"
   require "nvim-utils.Autocmd"
   require "nvim-utils.Kbd"

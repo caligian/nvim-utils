@@ -1,8 +1,6 @@
-require "nvim-utils.nvim"
 require "nvim-utils.Autocmd"
 require "nvim-utils.Job"
 require "nvim-utils.Buffer"
-require "nvim-utils.Buffer.Win"
 require "nvim-utils.Kbd"
 local lsp = require "nvim-utils.lsp"
 
@@ -553,7 +551,7 @@ function Filetype:format_buffer_workspace(bufnr)
 end
 
 function Filetype:format_buffer(bufnr, cmd_for)
-  local cmd, opts = self:get_command(bufnr, "formatter", cmd_for)
+  local cmd, opts = self:get_command(bufnr, "formatter", cmd_for or 'buffer')
 
   if not cmd then
     return
@@ -646,14 +644,7 @@ function Filetype:setup()
       self:setup_lsp()
       Kbd.from_dict(default_mappings)
     end, function()
-      logger:warn(dump {
-        obj = copy(self),
-        buf_opts = self.buf_opts or {},
-        mappings = self.mappings or {},
-        autocmds = self.autocmds or {},
-        commands = self.commands or {},
-        lsp = self.server or {},
-      })
+      logger:warn(dump(dict.items(self)))
     end)
   end)
 end

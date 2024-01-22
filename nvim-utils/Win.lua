@@ -406,7 +406,7 @@ local exclude = {
   nr2id = true,
   winnr = true,
   winid = true,
-  currentid = true,
+  current_id = true,
 }
 
 dict.each(Win, function(key, _)

@@ -1,5 +1,4 @@
 require "nvim-utils.state"
-require "nvim-utils.nvim"
 
 local RED = 0.2126
 local GREEN = 0.7152

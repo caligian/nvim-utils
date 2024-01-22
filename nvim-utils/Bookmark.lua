@@ -1,6 +1,6 @@
 require "nvim-utils.Kbd"
 require "nvim-utils.Buffer"
-require "nvim-utils.Buffer.Win"
+require "nvim-utils.Win"
 require "nvim-utils.Autocmd"
 
 Bookmark = namespace()
