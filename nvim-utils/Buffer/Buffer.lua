@@ -824,12 +824,11 @@ end
 Buffer.option = vim.api.nvim_buf_get_option
 Buffer.var = vim.api.nvim_buf_get_var
 
-dict.merge(Buffer, {
-  dict.filter(vim.api, function(key, _)
-    return key:match "^nvim_buf_"
-  end, function(key, value)
-    return key:gsub("^nvim_buf_", ""), value
-  end),
-})
+dict.merge2(Buffer, nvim.buf)
+dict.merge2(Buffer, require "nvim-utils.Buffer.float")
 
-dict.merge(Buffer, { require "nvim-utils.Buffer.float" })
+current_buf = Buffer.bufnr
+
+function current_buf_name()
+  return Buffer.get_name(current_buf())
+end

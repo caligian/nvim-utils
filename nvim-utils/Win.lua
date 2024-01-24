@@ -437,3 +437,6 @@ dict.each(Winid, function(key, value)
     end
   end
 end)
+
+current_winnr = Win.current
+current_winid = Win.current_id
