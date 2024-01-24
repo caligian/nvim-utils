@@ -1,8 +1,6 @@
 require "lua-utils.utils"
 require "lua-utils.table"
 
-require "nvim-utils.state"
-
 local lpeg = require "lpeg"
 local lfs = require "lfs"
 Path = dict.merge(namespace(), { lfs })
@@ -147,7 +145,7 @@ end
 --- ls [-p] <path>
 --- @param p string dirpath
 --- @param show_dirs? boolean add '/' at the end of dirs
---- @return string[]
+--- @return string[]?
 function Path.ls(p, show_dirs)
   if not Path.is_dir(p) then
     return
@@ -235,7 +233,6 @@ function Path.dirname(p)
     return
   end
 
-  local path_sep = "/"
   if #p == 1 then
     return false
   end

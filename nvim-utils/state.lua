@@ -1,4 +1,5 @@
 require "lua-utils"
+require 'nvim-utils.Path'
 require "nvim-utils.logger"
 
 function is_path(x)
