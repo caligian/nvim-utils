@@ -495,6 +495,9 @@ function Filetype:set_autocmds(mappings)
       opts = value[2] or opts
     end
 
+    opts.name = name
+    opts.desc = opts.desc or name
+
     self:create_autocmd(fun, opts)
   end)
 end
