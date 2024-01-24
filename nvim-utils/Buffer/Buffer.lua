@@ -1,19 +1,22 @@
 require "nvim-utils.Kbd"
 
+--- @class Buffer
+
 Buffer = namespace "Buffer"
 Buffer:include_module(nvim.buf)
 
 function is_buffer(obj)
-  return typeof(obj) == 'Buffer'
+  return typeof(obj) == "Buffer"
 end
 
---- @param bufnr Buffer|string|number
+--- @param bufnr? Buffer|string|number
 --- @return number?
 function Buffer.bufnr(bufnr)
   if is_nil(bufnr) then
     return vim.fn.bufnr()
   end
 
+  --- @cast bufnr Buffer | string | number
   assert_is_a(bufnr, union(is_buffer, "string", "number", "Buffer"))
 
   if is_table(bufnr) then
@@ -43,6 +46,8 @@ function Buffer.create(name)
 end
 
 local function init(self, bufnr_or_name, scratch, listed)
+  --- @cast self Buffer
+
   if is_nil(bufnr_or_name) then
     bufnr_or_name = vim.fn.bufnr()
   end
@@ -89,7 +94,7 @@ function Buffer:__call(bufnr_or_name, scratch, listed)
     return vim.api.nvim_buf_is_valid(self.id)
   end
 
-  function obj:scratch(listed)
+  function obj:scratch()
     if self.is_scratch and self:exists() then
       return
     end
@@ -152,12 +157,12 @@ function Buffer:__call(bufnr_or_name, scratch, listed)
       return
     end
 
-    obj[fun] = function(self, ...)
-      if not self:exists() then
-        return nil, "invalid buffer " .. dump(self.id)
+    obj[fun] = function(here, ...)
+      if not here:exists() then
+        return nil, "invalid buffer " .. dump(here.id)
       end
 
-      return method(self.id, ...)
+      return method(here.id, ...)
     end
   end)
 
@@ -361,8 +366,8 @@ function Buffer.list(bufnr, opts)
   if keep_dict then
     local info = {}
 
-    list.each(out, function(bufnr)
-      info[bufnr] = found[bufnr]
+    list.each(out, function(_bufnr)
+      info[_bufnr] = found[_bufnr]
     end)
 
     return info
@@ -451,7 +456,7 @@ end
 --- @param X number | {[1]:number, [2]:number} row or {start_row, end_row}
 --- @param Y number | {[1]:number, [2]:number} col or {start_col, end_col}
 --- @return string[]
-function Buffer.substr(bufnr, X, Y, s)
+function Buffer.substr(bufnr, X, Y)
   local spec = function(x)
     local ok, msg = union("table", "number")(x)
 
@@ -814,7 +819,7 @@ function Buffer.get_line(bufnr, row)
     return
   end
 
-  local row = row or Buffer.row(bufnr, row) - 1
+  row = row or Buffer.row(bufnr) - 1
 
   if row then
     return Buffer.get_lines(bufnr, row, row + 1, false)[1]
