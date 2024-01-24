@@ -654,5 +654,3 @@ function Filetype.main()
     Filetype(ft):setup()
   end)
 end
-
-

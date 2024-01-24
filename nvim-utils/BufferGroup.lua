@@ -158,7 +158,7 @@ function BufferGroup:list_buffers()
   }
 end
 
-local function create_buffer_picker(self)
+local function create_picker(self)
   local ls = BufferGroup.list_buffers(self)
 
   if not ls then
@@ -191,7 +191,7 @@ local function create_buffer_picker(self)
 end
 
 --- @param self number|BufferGroup
-function BufferGroup:create_buffer_picker()
+function BufferGroup:create_picker()
   local ls
 
   if is_number(self) then
@@ -200,7 +200,7 @@ function BufferGroup:create_buffer_picker()
     if not ls then
       return
     elseif #ls.results == 1 then
-      return create_buffer_picker(user.buffer_groups[ls.results[1]])
+      return create_picker(user.buffer_groups[ls.results[1]])
     end
 
     user.telescope()
@@ -219,7 +219,7 @@ function BufferGroup:create_buffer_picker()
     return user.telescope:create_picker(ls, {
       function(prompt_bufnr)
         local group = user.telescope:selected(prompt_bufnr)
-        user.buffer_groups[group.value]:run_buffer_picker()
+        user.buffer_groups[group.value]:run_picker()
       end,
       { "n", "X", mod.reinclude },
     }, {
@@ -227,7 +227,7 @@ function BufferGroup:create_buffer_picker()
     })
   end
 
-  return create_buffer_picker(self)
+  return create_picker(self)
 end
 
 function BufferGroup:run_reinclude_buffers_picker()
@@ -280,15 +280,15 @@ function BufferGroup.create_main_picker()
     function(prompt_bufnr)
       local group = user.telescope:selected(prompt_bufnr)
       group = user.buffer_groups[group.value]
-      group:run_buffer_picker()
+      group:run_picker()
     end,
     { "n", "X", mod.reinclude },
     { "n", "x", mod.delete },
   }, { prompt_title = "BufferGroups" })
 end
 
-function BufferGroup.run_buffer_picker(self)
-  local picker = BufferGroup.create_buffer_picker(self)
+function BufferGroup.run_picker(self)
+  local picker = BufferGroup.create_picker(self)
 
   if picker then
     picker:find()
@@ -427,6 +427,6 @@ function BufferGroup.main()
   end, "show buffergroups")
 
   Kbd.map("n", "<leader>.", function()
-    BufferGroup.run_buffer_picker(Buffer.current())
+    BufferGroup.run_picker(Buffer.current())
   end, "show buffergroups for buffer")
 end

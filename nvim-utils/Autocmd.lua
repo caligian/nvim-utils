@@ -179,6 +179,7 @@ function Autocmd.from_dict(specs)
   for key, value in pairs(specs) do
     value[2] = is_string(value[2]) and { desc = value[2] } or value[2]
     value[2].name = key
+    value[2].desc = value[2].desc or key
 
     out[key] = Autocmd(unpack(value))
   end
