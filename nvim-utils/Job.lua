@@ -152,7 +152,7 @@ function Job:_create_on_exit_handler()
     end
 
     if after then
-      after(self)
+      after()
     end
 
     self.job_id = nil
@@ -213,7 +213,6 @@ function Job.format_buffer(bufnr, cmd, opts)
   opts = dict.merge2(opts, {
     output = true,
     on_exit = function(job)
-      Buffer.set_option(bufnr, "modifiable", true)
       local stdout, stderr = job.output.stdout, job.output.stderr
       local has_elems = function(x)
         return is_table(x) and not (#x == 1 and x[1] == "")
@@ -230,9 +229,10 @@ function Job.format_buffer(bufnr, cmd, opts)
       end
 
       if has_elems(stdout) then
+        Buffer.set_option(bufnr, "modifiable", true)
         Buffer.set(bufnr, { 0, -1 }, stdout)
-        vim.cmd "redraw!"
       elseif has_elems(stderr) then
+        Buffer.set_option(bufnr, "modifiable", true)
         tostderr("failed to format buffer: " .. name)
         return
       end

@@ -42,3 +42,5 @@ build = {
     ["nvim-utils.bootstrap"] = "nvim-utils/bootstrap.lua",
   },
 }
+
+

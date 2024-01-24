@@ -168,6 +168,7 @@ local function _set_autocmds(self, autocmds)
     name = "plugin." .. self.name .. "." .. name
     spec[2] = spec[2] or {}
     spec[2].name = name
+    spec[2].desc =  spec[2].desc or name
     Autocmd(unpack(spec))
   end)
 end
@@ -197,6 +198,7 @@ local function _set_mappings(self, mappings)
 
     spec[4] = copy(spec[4])
     spec[4].desc = spec[4].desc or key
+    spec[4].name = key
 
     dict.merge(spec[4], { opts })
 
