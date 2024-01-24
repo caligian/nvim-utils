@@ -369,54 +369,8 @@ function BufferGroup:init(name, event, pattern, opts)
   return self
 end
 
-function BufferGroup.loadfile()
-  local specs = {}
-  local src = req2path "core.defaults.buffergroup"
-  local usersrc = req2path "user.buffergroup"
-
-  if src then
-    local config = loadfile(src)
-    config = config and config()
-
-    if config and is_table(config) then
-      dict.merge(specs, { config })
-    end
-  end
-
-  if usersrc then
-    local config = loadfile(usersrc)
-    config = config and config()
-
-    if config and is_table(config) then
-      dict.merge(specs, { config })
-    end
-  end
-
-  if size(specs) > 0 then
-    return BufferGroup.from_dict(specs)
-  end
-end
-
 function BufferGroup.require()
-  local specs = {}
-
-  if req2path "core.defaults.buffer_groups" then
-    local config = requirex "core.defaults.buffer_groups"
-    if config and is_table(config) then
-      dict.merge(specs, { config })
-    end
-  end
-
-  if req2path "user.buffer_group" then
-    local config = requirex "user.buffer_groups"
-    if config and is_table(config) then
-      dict.merge(specs, { config })
-    end
-  end
-
-  if size(specs) > 0 then
-    return BufferGroup.from_dict(specs)
-  end
+  return BufferGroup.from_dict(require_config 'buffer_groups')
 end
 
 function BufferGroup.main()

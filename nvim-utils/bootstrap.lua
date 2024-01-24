@@ -2,6 +2,7 @@ require "lua-utils"
 
 local setup = {}
 
+
 function setup:setup_user_dirs(dir)
   dir = dir or user.user_dir or (os.getenv "HOME" .. "/.nvim/lua")
 
@@ -12,7 +13,7 @@ function setup:setup_user_dirs(dir)
 
   local dirs = user.user_dirs
   for i = 1, #dirs do
-    package.path = package.path .. ";" .. dirs[i]
+    vim.opt.rtp:prepend(dirs)
   end
 end
 
@@ -38,7 +39,7 @@ function setup:setup_luarocks(dir)
   end
 
   for i = 1, #paths do
-    package.path = package.path .. ";" .. paths[i]
+    vim.opt.rtp:prepend(paths[i])
   end
 end
 

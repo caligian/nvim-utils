@@ -77,64 +77,23 @@ function Plugin.list()
   return fs
 end
 
-function Plugin:loadfile()
-  local name = self.name
-  local luapath = req2path("core.plugins." .. name)
-  local userluapath = req2path("user.plugins." .. name)
-  local builtin, userconfig
-
-  if not luapath and not userluapath then
-    return
-  end
-
-  builtin = luapath and loadfilex(luapath)
-  userconfig = userluapath and loadfilex(userluapath)
-
-  local plug = Plugin(name)
-  local _, okuserconfig
-
-  if is_function(userconfig) then
-    _, userconfig = pcall(userconfig)
-  end
-
-  if is_function(builtin) then
-    _, builtin = pcall(builtin)
-  end
-
-  if is_table(builtin) and is_table(userconfig) then
-    dict.merge(plug, { builtin, userconfig })
-  elseif not builtin and not userconfig then
-    return plug
-  elseif is_table(builtin) then
-    dict.merge(plug, { builtin })
-  elseif is_table(userconfig) then
-    dict.merge(plug, { userconfig })
-  end
-
-  return plug
-end
-
 function Plugin:require()
   local name = self.name
-  local luapath = req2path("core.plugins." .. name)
-  local userluapath = req2path("user.plugins." .. name)
-  local builtin, userconfig
+  local req_name = 'core.plugins.' .. name
+  local ok, msg = pcall(require, req_name)
+  local userluapath = user.user_dir .. '/plugins/' .. name .. '.lua'
 
-  builtin = luapath and requirex("core.plugins." .. name)
-  userconfig = userluapath and requirex("user.plugins." .. name)
-  local plug = self
-
-  if is_table(builtin) and is_table(userconfig) then
-    dict.merge(plug, { builtin, userconfig })
-  elseif not builtin and not userconfig then
-    return plug
-  elseif is_table(builtin) then
-    dict.merge(plug, { builtin })
-  elseif is_table(userconfig) then
-    dict.merge(plug, { userconfig })
+  if not ok then
+    msg = {}
   end
 
-  return plug
+  if is_file(userluapath) then
+    requirex('user.plugins.' .. name, function (user_conf)
+      dict.merge2(msg, user_conf)
+    end)
+  end
+
+  return dict.merge2(self, msg)
 end
 
 function Plugin:configure()
@@ -149,12 +108,7 @@ function Plugin:configure()
     self:set_mappings()
   end, function(msg)
     logger:warn(msg)
-    logger:debug(dump {
-      obj = copy(self),
-      autocmds = self.autocmds or {},
-      mappings = self.mappings or {},
-      spec = self.spec or {},
-    })
+    logger:debug(dump(items(self)))
   end)
 end
 
@@ -225,7 +179,9 @@ function Plugin.lazy_spec()
 
     function spec.config()
       local plug = Plugin(name)
+
       plug:configure()
+
       if conf and is_function(conf) then
         pcall(conf)
       end

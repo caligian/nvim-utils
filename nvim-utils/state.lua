@@ -1,9 +1,34 @@
 require "lua-utils"
+require "nvim-utils.logger"
 
-if user and not is_empty(user) then
-  return user
+function is_path(x)
+  local x = vim.loop.fs_stat(x)
+  if not x then
+    return
+  end
+
+  if x.type == "directory" then
+    return x, "dir"
+  end
+
+  return x, "file"
 end
 
+function is_dir(x)
+  local ok, tp = is_path(x)
+  if ok and tp == "dir" then
+    return x
+  end
+end
+
+function is_file(x)
+  local ok, tp = is_path(x)
+  if ok and tp == "file" then
+    return x
+  end
+end
+
+--------------------------------------------------
 local data_dir = vim.fn.stdpath "data"
 local dir = vim.fn.stdpath "config"
 local user_dir = table.concat({ os.getenv "HOME", ".nvim" }, "/")
@@ -19,22 +44,23 @@ local paths = {
   servers = table.concat({ data_dir, "lsp-servers" }, "/"),
 }
 
-user = {
-  plugins = { exclude = {} },
-  jobs = {},
-  filetypes = {},
-  buffers = {},
-  terminals = {},
-  kbds = {},
-  repls = {},
-  bookmarks = {},
-  autocmds = {},
-  buffer_groups = {},
-  paths = paths,
-  user_dir = (os.getenv "HOME" .. "/.nvim/lua"),
-  luarocks_dir = (os.getenv "HOME" .. "/" .. ".luarocks"),
-  lazy_path = (vim.fn.stdpath "data" .. "/lazy/lazy.nvim"),
-}
+user = user
+  or {
+    plugins = { exclude = {} },
+    jobs = {},
+    filetypes = {},
+    buffers = {},
+    terminals = {},
+    kbds = {},
+    repls = {},
+    bookmarks = {},
+    autocmds = {},
+    buffer_groups = {},
+    paths = paths,
+    user_dir = (os.getenv "HOME" .. "/.nvim/lua"),
+    luarocks_dir = (os.getenv "HOME" .. "/" .. ".luarocks"),
+    lazy_path = (vim.fn.stdpath "data" .. "/lazy/lazy.nvim"),
+  }
 
 local _winapi = {}
 local _bufapi = {}
@@ -87,6 +113,70 @@ nvim = mtset(nvim, {
 })
 
 --------------------------------------------------
+
+--- @param x string require path. errors will be logged
+--- @param cb? function callback
+--- @param on_fail? function callback on failure
+--- @return any, string?
+function requirex_if(x, cb, on_fail)
+  local ok, msg = pcall(require, x)
+  if not ok then
+    if msg then
+      logger:warn(msg)
+    end
+
+    if on_fail then
+      return on_fail(msg)
+    end
+
+    return nil, msg
+  elseif cb then
+    return cb(msg)
+  else
+    return msg
+  end
+end
+
+--- @param x string require path
+--- @param cb? function callback
+--- @param on_fail? function callback on failure
+--- @return any?, string?
+function require_if(x, cb, on_fail)
+  local ok, msg = pcall(require, x)
+  if not ok then
+    if on_fail then
+      return on_fail(msg)
+    end
+
+    return nil, msg
+  elseif cb then
+    return cb(msg)
+  else
+    return msg
+  end
+end
+
+requirex = requirex_if
+
+function require_config(mod_name)
+  assert_is_a.string(mod_name)
+  local core_path = "nvim-utils.defaults." .. mod_name
+
+  return requirex(core_path, function(core)
+    local user_path = user.user_dir .. "/" .. mod_name
+    if is_file(user_path) then
+      return requirex("user." .. mod_name, function(user_conf)
+        return dict.merge2(core, user_config)
+      end, function()
+        return core
+      end)
+    end
+
+    return core
+  end)
+end
+
+--------------------------------------------------
 function vimsize()
   local scratch = vim.api.nvim_create_buf(false, true)
 
@@ -121,16 +211,6 @@ function system(...)
   return vim.fn.systemlist(...)
 end
 
-function requirex(require_string)
-  local ok, msg = pcall_warn(require, require_string)
-
-  if not ok then
-    return ok, msg
-  else
-    return ok
-  end
-end
-
 function glob(d, expr, nosuf, alllinks)
   nosuf = nosuf == nil and true or false
   return vim.fn.globpath(d, expr, nosuf, true, alllinks) or {}
@@ -150,28 +230,6 @@ function whereis(bin)
   return out
 end
 
-function req2path(s, isfile)
-  local p = strsplit(s, "[./]") or { s }
-  local test
-
-  if p[1]:match "user" then
-    test = Path.join(user.paths.user, "lua", unpack(p))
-  else
-    test = Path.join(user.paths.config, "lua", unpack(p))
-  end
-
-  local isdir = Path.exists(test)
-  isfile = Path.exists(test .. ".lua")
-
-  if isfile and isfile then
-    return test .. ".lua", "file"
-  elseif isdir then
-    return test, "dir"
-  elseif isfile then
-    return test .. ".lua", "file"
-  end
-end
-
 function loadfilex(path)
   local ok, msg = loadfile(path)
   if not ok then
@@ -179,25 +237,6 @@ function loadfilex(path)
   end
 
   return ok--[[@as function]]()
-end
-
-function reqloadfile(path)
-  path = req2path(path)
-
-  if not path then
-    return
-  end
-
-  return loadfile(path)
-end
-
-function reqloadfilex(path)
-  path = req2path(path)
-  if not path then
-    return
-  end
-
-  return loadfilex(path)
 end
 
 function getpid(pid)
@@ -258,7 +297,7 @@ end
 
 function require_merge(...)
   local out = {}
-  local req_paths = {...}
+  local req_paths = { ... }
 
   for i = 1, #req_paths do
     local res = requirex(req_paths[i])
@@ -270,8 +309,6 @@ function require_merge(...)
   return out
 end
 
---------------------------------------------------
-require "nvim-utils.logger"
 --------------------------------------------------
 
 return user

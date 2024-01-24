@@ -23,7 +23,7 @@ function REPL.exists(self, tp)
     else
       return user.repls[Buffer.get_name(self)]
     end
-  elseif REPL.is_a(self) then
+  elseif typeof(self) == 'REPL' then
     return self
   end
 end

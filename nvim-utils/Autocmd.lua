@@ -187,54 +187,8 @@ function Autocmd.from_dict(specs)
   return out
 end
 
-function Autocmd.loadfile()
-  local src = req2path "core.defaults.autocmds"
-  local usersrc = req2path "user.autocmds"
-  local specs = {}
-
-  if src then
-    local config = loadfile(src)
-    if is_function(config) then
-      config = config()
-      if is_table(config) then
-        dict.merge(specs, { config })
-      end
-    end
-  end
-
-  if usersrc then
-    local config = loadfile(usersrc)
-    if is_function(config) then
-      config = config()
-      if is_table(config) then
-        dict.merge(specs, { config })
-      end
-    end
-  end
-
-  return Autocmd.from_dict(specs)
-end
-
 function Autocmd.require()
-  local src = req2path "core.defaults.autocmds"
-  local usersrc = req2path "user.autocmds"
-  local specs = {}
-
-  if usersrc then
-    local config = requirex "core.defaults.autocmds"
-    if is_table(config) then
-      dict.merge(specs, { config })
-    end
-  end
-
-  if src then
-    local config = requirex "core.defaults.autocmds"
-    if is_table(config) then
-      dict.merge(specs, { config })
-    end
-  end
-
-  return Autocmd.from_dict(specs)
+  return Autocmd.from_dict(require_config 'autocmds' or {})
 end
 
 function Autocmd.main()

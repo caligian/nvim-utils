@@ -15,9 +15,9 @@ function T:__call()
   self.conf = require("telescope.config").values
   self.theme = dict.merge(require("telescope.themes").get_ivy(), {
     {
-      disable_devicons = false,
+      disable_devicons = true,
       previewer = false,
-      layout_config = { height = 10 },
+      layout_config = { height = 12 },
     },
   }, { dict.filter(T, function(key, _)
     return key ~= "__call"
@@ -51,12 +51,7 @@ function T:selected(bufnr, many)
     self.actions.close(bufnr)
 
     if many then
-      local nargs = picker:get_multi_selection()
-      if #nargs > 0 then
-        return nargs
-      end
-
-      return { self.action_state.get_selected_entry() }
+      return picker:get_multi_selection()
     end
 
     return self.action_state.get_selected_entry()

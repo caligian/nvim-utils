@@ -13,8 +13,8 @@ Terminal.exceptions = {
 
 Terminal.timeout = 200
 
-function Terminal.is_a(x)
-  return mtget(x) == "Terminal"
+function is_term(obj)
+  return typeof(obj) == 'Terminal'
 end
 
 function Terminal.opts(opts)

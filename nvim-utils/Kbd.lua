@@ -223,54 +223,8 @@ function Kbd.from_dict(specs)
   return out
 end
 
-function Kbd.loadfile()
-  local src = req2path "core.defaults.kbds"
-  local usersrc = req2path "user.kbds"
-  local specs = {}
-
-  if src then
-    local config = loadfile(src)
-    if is_function(config) then
-      config = config--[[@as function]]()
-      if is_table(config) then
-        dict.merge(specs, { config })
-      end
-    end
-  end
-
-  if usersrc then
-    local config = loadfile(usersrc)
-    if is_function(config) then
-      config = config--[[@as function]]()
-      if is_table(config) then
-        dict.merge(specs, { config })
-      end
-    end
-  end
-
-  return Kbd.from_dict(specs)
-end
-
 function Kbd.require()
-  local src = req2path "core.defaults.kbds"
-  local usersrc = req2path "user.kbds"
-  local specs = {}
-
-  if usersrc then
-    local config = requirex "core.defaults.kbds"
-    if is_table(config) then
-      dict.merge(specs, { config })
-    end
-  end
-
-  if src then
-    local config = requirex "core.defaults.kbds"
-    if is_table(config) then
-      dict.merge(specs, { config })
-    end
-  end
-
-  return Kbd.from_dict(specs)
+  return Kbd.from_dict(require_config 'kbds' or {})
 end
 
 Kbd.main = Kbd.require

@@ -3,11 +3,8 @@ require "nvim-utils.Kbd"
 Buffer = namespace "Buffer"
 Buffer:include_module(nvim.buf)
 
---- Is object a Buffer
---- @param bufnr any
---- @return boolean
-function Buffer.is_a(bufnr)
-  return is_table(bufnr) and typeof(bufnr) == "Buffer"
+function is_buffer(obj)
+  return typeof(obj) == 'Buffer'
 end
 
 --- @param bufnr Buffer|string|number
@@ -17,7 +14,7 @@ function Buffer.bufnr(bufnr)
     return vim.fn.bufnr()
   end
 
-  assert_is_a(bufnr, union(Buffer.is_a, "string", "number", "Buffer"))
+  assert_is_a(bufnr, union(is_buffer, "string", "number", "Buffer"))
 
   if is_table(bufnr) then
     bufnr = bufnr.id
@@ -50,7 +47,7 @@ local function init(self, bufnr_or_name, scratch, listed)
     bufnr_or_name = vim.fn.bufnr()
   end
 
-  if Buffer.is_a(bufnr_or_name) and vim.api.nvim_buf_is_valid(bufnr_or_name.id) then
+  if is_buffer(bufnr_or_name) and vim.api.nvim_buf_is_valid(bufnr_or_name.id) then
     return bufnr_or_name
   end
 
@@ -836,10 +833,3 @@ dict.merge(Buffer, {
 })
 
 dict.merge(Buffer, { require "nvim-utils.Buffer.float" })
-
---- is obj a Buffer
---- @param self
---- @return boolean
-function is_buffer(self)
-  return typeof(self) == "Buffer"
-end

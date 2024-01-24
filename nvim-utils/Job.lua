@@ -37,6 +37,7 @@ function Job:_create_output_handlers()
 
   local function collect(job_id, data, event)
     list.extend(self.output[event], { data })
+
     if event == "stdout" and on_stdout then
       on_stdout(job_id, data, event)
     elseif event == "stderr" and on_stderr then
@@ -210,7 +211,7 @@ function Job.format_buffer(bufnr, cmd, opts)
   end
 
   local name = Buffer.get_name(bufnr)
-  opts = dict.merge2(opts, {
+  local default = {
     output = true,
     on_exit = function(job)
       local stdout, stderr = job.output.stdout, job.output.stderr
@@ -237,8 +238,9 @@ function Job.format_buffer(bufnr, cmd, opts)
         return
       end
     end,
-  })
+  }
 
+  opts = dict.lmerge2(default, opts)
   local j = Job(cmd, opts)
   j.target_buffer = bufnr
   j.target_buffer_name = name
