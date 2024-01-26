@@ -85,7 +85,7 @@ function REPL:init(bufnr, opts)
   end
 
   if _opts then
-    dict.merge(opts, { _opts })
+    dict.merge(opts, _opts)
   end
 
   self.cmd = cmd[2]
@@ -270,5 +270,3 @@ function REPL:delete()
 
   return self
 end
-
-

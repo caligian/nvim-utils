@@ -50,7 +50,7 @@ function Plugin:init(name, opts)
   self.require_all = nil
   opts = copy(opts)
   opts.name = name
-  dict.merge(self, { opts })
+  dict.merge(self, opts)
 
   user.plugins[self.name] = self
 
@@ -89,11 +89,11 @@ function Plugin:require()
 
   if is_file(userluapath) then
     requirex("user.plugins." .. name, function(user_conf)
-      dict.merge2(msg, user_conf)
+      dict.merge(msg, user_conf)
     end)
   end
 
-  return dict.merge2(self, msg)
+  return dict.merge(self, msg)
 end
 
 function Plugin:configure()
@@ -156,7 +156,7 @@ local function _set_mappings(self, mappings)
     spec[4].desc = spec[4].desc or key
     spec[4].name = key
 
-    dict.merge(spec[4], { opts })
+    dict.merge(spec[4], opts)
 
     spec[4].name = name
 
@@ -202,5 +202,3 @@ end
 function Plugin.main()
   Plugin.setup_lazy()
 end
-
-

@@ -1,5 +1,5 @@
 require "lua-utils"
-require 'nvim-utils.Path'
+require "nvim-utils.Path"
 require "nvim-utils.logger"
 
 function is_path(x)
@@ -167,7 +167,7 @@ function require_config(mod_name)
     local user_path = user.user_dir .. "/" .. mod_name
     if is_file(user_path) then
       return requirex("user." .. mod_name, function(user_conf)
-        return dict.merge2(core, user_config)
+        return dict.merge(core, user_config)
       end, function()
         return core
       end)
@@ -303,7 +303,7 @@ function require_merge(...)
   for i = 1, #req_paths do
     local res = requirex(req_paths[i])
     if res then
-      dict.merge2(out, res)
+      dict.merge(out, res)
     end
   end
 

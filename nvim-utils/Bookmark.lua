@@ -61,7 +61,7 @@ function Bookmark.add(file_path, lines, desc)
 
   obj.creation_time = now
 
-  dict.merge(obj.context, { dict.from_list(totable(lines)) })
+  dict.merge(obj.context, dict.from_list(totable(lines)))
 
   obj.file = isfile
   obj.dir = isdir
@@ -332,5 +332,5 @@ function Bookmark.run_dwim_picker()
 end
 
 function Bookmark.set_mappings(mappings)
-  Kbd.from_dict(mappings or require_config('bookmarks') or {})
+  Kbd.from_dict(mappings or require_config "bookmarks" or {})
 end

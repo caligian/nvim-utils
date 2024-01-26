@@ -72,10 +72,10 @@ elixir.mappings = {
     "n",
     "<leader>rc",
     function()
-      local bufnr = buffer.bufnr()
-      local x = REPL(buffer.bufnr(), { workspace = true })
+      local bufnr = current_buf()
+      local x = REPL(bufnr(), { workspace = true })
       if x then
-        x:send(sprintf('c("%s")', buffer.name()))
+        x:send(sprintf('c("%s")', current_buf_name()))
       end
     end,
     { desc = "compile and run buffer" },
@@ -85,10 +85,9 @@ elixir.mappings = {
     "n",
     "<localleader>rc",
     function()
-      local bufnr = buffer.bufnr()
-      local x = REPL(buffer.bufnr(), { buffer = true })
+      local x = REPL(current_buf(), { buffer = true })
       if x then
-        x:send(sprintf('c("%s")', buffer.name()))
+        x:send(sprintf('c("%s")', current_buf_name()))
       end
     end,
     { desc = "compile and run buffer" },

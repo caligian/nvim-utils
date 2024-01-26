@@ -2,7 +2,6 @@ require "lua-utils"
 
 local setup = {}
 
-
 function setup:setup_user_dirs(dir)
   dir = dir or user.user_dir or (os.getenv "HOME" .. "/.nvim/lua")
 

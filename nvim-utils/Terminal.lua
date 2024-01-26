@@ -14,7 +14,7 @@ Terminal.exceptions = {
 Terminal.timeout = 200
 
 function is_term(obj)
-  return typeof(obj) == 'Terminal'
+  return typeof(obj) == "Terminal"
 end
 
 function Terminal.opts(opts)
@@ -40,7 +40,7 @@ end
 function Terminal:init(cmd, opts)
   opts = opts or {}
 
-  dict.merge(self, { opts })
+  dict.merge(self, opts)
 
   self.cmd = cmd
   self.load_from_path = opts.load_from_path

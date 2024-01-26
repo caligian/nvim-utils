@@ -666,7 +666,7 @@ end
 
 function Buffer.save(bufnr)
   Buffer.call(bufnr, function()
-    vim.cmd "w! %:p"
+    vim.cmd("w! " .. Buffer.get_name(bufnr))
   end)
 
   return true
@@ -829,8 +829,8 @@ end
 Buffer.option = vim.api.nvim_buf_get_option
 Buffer.var = vim.api.nvim_buf_get_var
 
-dict.merge2(Buffer, nvim.buf)
-dict.merge2(Buffer, require "nvim-utils.Buffer.float")
+dict.merge(Buffer, nvim.buf)
+dict.merge(Buffer, require "nvim-utils.Buffer.float")
 
 current_buf = Buffer.bufnr
 

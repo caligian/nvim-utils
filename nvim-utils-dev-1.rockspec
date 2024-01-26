@@ -38,7 +38,7 @@ build = {
     ["nvim-utils.Autocmd"] = "nvim-utils/Autocmd.lua",
     ["nvim-utils.REPL"] = "nvim-utils/REPL.lua",
     ["nvim-utils.Kbd"] = "nvim-utils/Kbd.lua",
-    ["nvim-utils.Job"] = "nvim-utils/Job.lua",
+    ["nvim-utils.Async"] = "nvim-utils/Async.lua",
     ["nvim-utils.Terminal"] = "nvim-utils/Terminal.lua",
     ["nvim-utils.bootstrap"] = "nvim-utils/bootstrap.lua",
 
@@ -75,6 +75,4 @@ build = {
     ["nvim-utils.defaults.filetype.text"] = "nvim-utils/defaults/filetype/text.lua",
     ["nvim-utils.defaults.filetype.zsh"] = "nvim-utils/defaults/filetype/zsh.lua",
   },
-}
-
-
+}   

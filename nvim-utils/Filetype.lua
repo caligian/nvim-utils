@@ -1,5 +1,6 @@
 require "nvim-utils.Autocmd"
-require "nvim-utils.Job"
+-- require "nvim-utils.Job"
+require "nvim-utils.Async"
 require "nvim-utils.Buffer"
 require "nvim-utils.Kbd"
 local lsp = require "nvim-utils.lsp"
@@ -467,7 +468,7 @@ function Filetype.buffer:__call(bufnr)
 end
 
 function Filetype:require()
-  return dict.merge2(self, require_config("filetype." .. self.name) or {})
+  return dict.merge(self, require_config("filetype." .. self.name) or {})
 end
 
 function Filetype:map(mode, ks, cb, opts)
@@ -578,10 +579,10 @@ function Filetype:format_buffer(bufnr, cmd_for)
   end
 
   local bufname = Buffer.get_name(bufnr)
-  local name = self.name .. "." .. cmd_for .. "." .. bufname
+  local name = self.name .. ".formatter." .. cmd_for .. "." .. bufname
 
   cmd = cmd[2]
-  self.jobs[name] = Job.format_buffer(bufnr, cmd, opts)
+  self.jobs[name] = Async.format_buffer(bufnr, cmd, opts)
   self.jobs[name]:start()
 
   return self.jobs[name]
@@ -604,17 +605,22 @@ function Filetype:compile_buffer(bufnr, action, cmd_for)
 
   local bufname = Buffer.get_name(bufnr)
   local name = self.name .. "." .. cmd_for .. "." .. bufname
+  local p = cmd[1]
+  cmd = cmd[2]
+  opts.split = true
+  opts.shell = true
 
-  if #cmd == 2 then
-    cmd = cmd[2]
-    opts.show = true
-    self.jobs[name] = Job(cmd, opts)
-
-    if self.jobs[name] then
-      self.jobs[name]:start()
-      return self.jobs[name]
-    end
+  if cmd_for ~= "buffer" then
+    cmd = "cd " .. p .. " && " .. cmd
   end
+
+  local j = Async(cmd, opts)
+
+  Buffer.save(bufnr)
+  j:start()
+
+  self.jobs[name] = j
+  return j
 end
 
 function Filetype:setup_lsp(specs)
@@ -666,7 +672,7 @@ function Filetype:setup()
   end)
 end
 
-Filetype.setup_lsp_all = vim.schedule_wrap(function ()
+Filetype.setup_lsp_all = vim.schedule_wrap(function()
   list.each(Filetype.list_configs(), function(ft)
     Filetype(ft):require():setup_lsp()
   end)
@@ -681,5 +687,3 @@ Filetype.main = vim.schedule_wrap(function()
     Filetype(ft):setup()
   end)
 end)
-
-

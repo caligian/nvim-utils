@@ -273,7 +273,7 @@ function lsp.setup_server(server, opts)
     flags = flags,
   }
 
-  default_conf = dict.merge(default_conf, { opts })
+  default_conf = dict.merge(default_conf, opts)
 
   if default_conf.cmd then
     default_conf.cmd = totable(default_conf.cmd)

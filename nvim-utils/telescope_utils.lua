@@ -1,4 +1,4 @@
-user.telescope = user.telescope or namespace()
+user.telescope = namespace()
 local T = user.telescope
 
 function T:__call()
@@ -6,7 +6,7 @@ function T:__call()
     return self
   end
 
-	self.exists = require "telescope"
+  self.exists = require "telescope"
   self.pickers = require "telescope.pickers"
   self.actions = require "telescope.actions"
   self.action_state = require "telescope.actions.state"
@@ -14,14 +14,10 @@ function T:__call()
   self.finders = require "telescope.finders"
   self.conf = require("telescope.config").values
   self.theme = dict.merge(require("telescope.themes").get_ivy(), {
-    {
-      disable_devicons = true,
-      previewer = false,
-      layout_config = { height = 12 },
-    },
-  }, { dict.filter(T, function(key, _)
-    return key ~= "__call"
-  end) })
+    disable_devicons = true,
+    previewer = false,
+    layout_config = { height = 12 },
+  })
 
   return self
 end
@@ -31,7 +27,7 @@ function T:module()
     __newindex = function(MOD, key, value)
       if key:match "^multi_" then
         rawset(MOD, key, function(bufnr)
-          return value(T:selected(bufnr, true))
+          list.each(T:selected(bufnr, true), value)
         end)
       else
         rawset(MOD, key, function(bufnr)
@@ -51,7 +47,13 @@ function T:selected(bufnr, many)
     self.actions.close(bufnr)
 
     if many then
-      return picker:get_multi_selection()
+      local gotten = picker:get_multi_selection()
+
+      if #gotten == 0 then
+        return { self.action_state.get_selected_entry() }
+      end
+
+      return gotten
     end
 
     return self.action_state.get_selected_entry()

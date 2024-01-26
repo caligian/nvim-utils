@@ -36,7 +36,7 @@ local opts = { noremap = true, leader = true }
 
 local withopts = function(overrides)
   overrides = is_string(overrides) and { desc = overrides } or overrides
-  return dict.lmerge(overrides, { opts })
+  return dict.lmerge(overrides, opts)
 end
 
 return {
