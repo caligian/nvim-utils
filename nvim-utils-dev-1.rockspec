@@ -13,7 +13,7 @@ description = {
 dependencies = {
   "lua >= 5.1",
   "lua-utils",
-  'busted',
+  "busted",
   "lualogging",
 }
 
@@ -76,3 +76,5 @@ build = {
     ["nvim-utils.defaults.filetype.zsh"] = "nvim-utils/defaults/filetype/zsh.lua",
   },
 }
+
+

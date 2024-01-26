@@ -141,7 +141,7 @@ function Job:_create_on_exit_handler()
     end
   end
 
-  self.on_exit = vim.schedule_wrap(function(id, exit_status)
+  self.on_exit = vim.schedule_wrap(function(_, exit_status)
     self.exit_status = exit_status
 
     if output and show then
@@ -213,6 +213,9 @@ function Job.format_buffer(bufnr, cmd, opts)
   local name = Buffer.get_name(bufnr)
   local default = {
     output = true,
+    before = function ()
+      vim.cmd(':w ' .. name)
+    end,
     on_exit = function(job)
       local stdout, stderr = job.output.stdout, job.output.stderr
       local has_elems = function(x)
@@ -249,6 +252,7 @@ function Job.format_buffer(bufnr, cmd, opts)
     return
   end
 
+  vim.cmd (':w! ' .. bufnr)
   j:start()
 
   return j
@@ -281,8 +285,8 @@ function Job:start()
     self:_create_output_handlers()
   end
 
-  if before then
-    before()
+  if self.before then
+    self.before()
   end
 
   local handle = jobs.start(self.cmd, self:opts())

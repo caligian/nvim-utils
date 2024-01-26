@@ -370,10 +370,10 @@ function BufferGroup:init(name, event, pattern, opts)
 end
 
 function BufferGroup.require()
-  return BufferGroup.from_dict(require_config 'buffer_groups')
+  return BufferGroup.from_dict(require_config "buffer_groups")
 end
 
-function BufferGroup.main()
+BufferGroup.main = vim.schedule_wrap(function()
   BufferGroup.require()
 
   Kbd.map("n", "<leader>>", function()
@@ -383,4 +383,4 @@ function BufferGroup.main()
   Kbd.map("n", "<leader>.", function()
     BufferGroup.run_picker(Buffer.current())
   end, "show buffergroups for buffer")
-end
+end)

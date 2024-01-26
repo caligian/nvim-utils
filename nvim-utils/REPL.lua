@@ -23,7 +23,7 @@ function REPL.exists(self, tp)
     else
       return user.repls[Buffer.get_name(self)]
     end
-  elseif typeof(self) == 'REPL' then
+  elseif typeof(self) == "REPL" then
     return self
   end
 end
@@ -108,9 +108,9 @@ function REPL:init(bufnr, opts)
   return Terminal.init(self, cmd, opts)
 end
 
-function REPL.main()
+REPL.main = vim.schedule_wrap(function()
   REPL.set_mappings()
-end
+end)
 
 function REPL.set_mappings()
   local function start(tp)
@@ -180,7 +180,8 @@ function REPL.set_mappings()
   end
 
   local function map(name, tp, key, callback)
-    local mode, key, desc = mkkeys(name, tp, key)
+    local mode, desc
+    mode, key, desc = mkkeys(name, tp, key)
 
     Kbd.map(mode, key, function()
       local buf = Buffer.current()
@@ -269,3 +270,5 @@ function REPL:delete()
 
   return self
 end
+
+

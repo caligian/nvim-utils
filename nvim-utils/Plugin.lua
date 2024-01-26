@@ -79,16 +79,16 @@ end
 
 function Plugin:require()
   local name = self.name
-  local req_name = 'core.plugins.' .. name
+  local req_name = "core.plugins." .. name
   local ok, msg = pcall(require, req_name)
-  local userluapath = user.user_dir .. '/plugins/' .. name .. '.lua'
+  local userluapath = user.user_dir .. "/plugins/" .. name .. ".lua"
 
   if not ok then
     msg = {}
   end
 
   if is_file(userluapath) then
-    requirex('user.plugins.' .. name, function (user_conf)
+    requirex("user.plugins." .. name, function(user_conf)
       dict.merge2(msg, user_conf)
     end)
   end
@@ -97,18 +97,20 @@ function Plugin:require()
 end
 
 function Plugin:configure()
-  xpcall(function()
-    self:require()
+  vim.schedule(function()
+    xpcall(function()
+      self:require()
 
-    if self.setup then
-      self:setup()
-    end
+      if self.setup then
+        self:setup()
+      end
 
-    self:set_autocmds()
-    self:set_mappings()
-  end, function(msg)
-    logger:warn(msg)
-    logger:debug(dump(items(self)))
+      self:set_autocmds()
+      self:set_mappings()
+    end, function(msg)
+      logger:warn(msg)
+      logger:debug(dump(items(self)))
+    end)
   end)
 end
 
@@ -122,7 +124,7 @@ local function _set_autocmds(self, autocmds)
     name = "plugin." .. self.name .. "." .. name
     spec[2] = spec[2] or {}
     spec[2].name = name
-    spec[2].desc =  spec[2].desc or name
+    spec[2].desc = spec[2].desc or name
     Autocmd(unpack(spec))
   end)
 end

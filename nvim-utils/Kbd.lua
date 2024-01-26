@@ -223,8 +223,7 @@ function Kbd.from_dict(specs)
   return out
 end
 
-function Kbd.require()
-  return Kbd.from_dict(require_config 'kbds' or {})
-end
 
-Kbd.main = Kbd.require
+Kbd.main = vim.schedule_wrap(function ()
+  return Kbd.from_dict(require_config 'kbds' or {})
+end)

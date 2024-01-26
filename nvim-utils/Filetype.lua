@@ -5,6 +5,7 @@ require "nvim-utils.Kbd"
 local lsp = require "nvim-utils.lsp"
 
 Filetype = class("Filetype", {
+  "setup_lsp_all",
   "buffer",
   "from_dict",
   "jobs",
@@ -440,7 +441,7 @@ function Filetype:init(name)
   nvim.create.autocmd("FileType", {
     pattern = name,
     callback = function(_)
-      pcall(function ()
+      pcall(function()
         self:require()
       end)
     end,
@@ -658,15 +659,20 @@ function Filetype:setup()
       self:set_commands()
       self:set_autocmds()
       self:set_mappings()
-      self:setup_lsp()
       Kbd.from_dict(default_mappings)
     end, function(msg)
-    logger:warn(warn .. '\n' .. dump(self:get_attribs()))
+      logger:warn(warn .. "\n" .. dump(self:get_attribs()))
     end)
   end)
 end
 
-function Filetype.main()
+Filetype.setup_lsp_all = vim.schedule_wrap(function ()
+  list.each(Filetype.list_configs(), function(ft)
+    Filetype(ft):require():setup_lsp()
+  end)
+end)
+
+Filetype.main = vim.schedule_wrap(function()
   requirex("nvim-utils.defaults.filetype.kbds", function(mappings)
     Kbd.from_dict(mappings)
   end)
@@ -674,4 +680,6 @@ function Filetype.main()
   list.each(Filetype.list_configs(), function(ft)
     Filetype(ft):setup()
   end)
-end
+end)
+
+
