@@ -419,6 +419,7 @@ function Filetype:init(name)
         self:load_config()
       end)
     end,
+    desc = 'load config for ' .. self.name,
   })
 
   user.filetypes[self.name] = self
@@ -437,13 +438,7 @@ function Filetype:load_user_config()
 end
 
 function Filetype:load_config()
-  local user_conf = self:load_user_config() or {}
-  local builtin = Path.is_file(self.paths.config) and require(self.requires.config)
-  if not user_config and not builtin then
-    return
-  end
-
-  return dict.merge(self, builtin, user_config)
+  return dict.merge(self, require_ftconfig(self.name) or {})
 end
 
 function Filetype:map(mode, ks, cb, opts)

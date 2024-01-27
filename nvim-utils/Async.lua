@@ -1,5 +1,7 @@
-uv = vim.loop
-Async = class("Async", {})
+local uv = vim.loop
+
+--- @class Async
+Async = class("Async", {'format_buffer'})
 
 function Async:create_pipes()
   self.pipes = {
@@ -10,16 +12,39 @@ function Async:create_pipes()
   return self
 end
 
-function Async:_read_start()
-  self.pipes.stdout:read_start(vim.schedule_wrap(function(_, data)
-    if data then
-      list.extend(self.output.stdout, strsplit(data, "\n"))
+function Async:is_active()
+  if not self.handle then
+    error "no handle exists for job"
+  end
+
+  return self.handle:is_active()
+end
+
+function Async:is_closing()
+  if not self.handle then
+    error "no handle exists for job"
+  end
+
+  return self.handle:is_closing()
+end
+
+function Async:read_start()
+  local stdout_pipe = self.pipes.stdout
+  local stderr_pipe = self.pipes.stderr
+
+  stderr_pipe:read_start(vim.schedule_wrap(function(_, data)
+    if self:is_closing() then
+      stderr:shutdown()
+    elseif data then
+      list.extend(self.output.stderr, strsplit(data, "\n"))
     end
   end))
 
-  self.pipes.stderr:read_start(vim.schedule_wrap(function(_, data)
-    if data then
-      list.extend(self.output.stderr, strsplit(data, "\n"))
+  stdout_pipe:read_start(vim.schedule_wrap(function(_, data)
+    if self:is_closing() then
+      stdout:shutdown()
+    elseif data then
+      list.extend(self.output.stdout, strsplit(data, "\n"))
     end
   end))
 end
@@ -30,13 +55,24 @@ function Async:close_pipes()
   end)
 end
 
-function Async:_check_start()
-  self._check = uv.new_check()
-  self._check:start(function()
-    if self.handle:is_closing() then
+function Async:check_start()
+  self.check = uv.new_check()
+  local check = self.check
+
+  check:start(function()
+    if self:is_closing() then
       self:close_pipes()
     end
   end)
+end
+
+function Async:check_stop()
+  if not self.check or not self.check:is_active() then
+    return
+  end
+
+  self.check:stop()
+  return self
 end
 
 function Async:write(str)
@@ -49,33 +85,35 @@ function Async:write(str)
 end
 
 function Async:close_stdin()
-  if self.pipes.stdin:is_closing() then
-    return
-  end
-
   self.pipes.stdin:shutdown()
   return self
 end
 
 function Async:stop()
-  if self.handle:is_closing() then
+  if not self:is_active() then
     return
   end
 
   self.handle:close()
+  self:close_pipes()
+  self:check_stop()
+
   return self
 end
 
 function Async:start(cmd)
-  if self:is_active() then
+  if self.handle and self:is_active() then
     return self
   end
 
   local on_exit = self.on_exit
-  self.handle = vim.loop.spawn(
+  self.handle = uv.spawn(
     self.cmd,
     self.opts,
     vim.schedule_wrap(function(code, signal)
+      self:check_stop()
+      self:close_pipes()
+
       self.exit_status = code
       self.exit_signal = signal
 
@@ -125,18 +163,10 @@ function Async:start(cmd)
     return
   end
 
-  self:_read_start()
-  self:_check_start()
+  self:read_start()
+  self:check_start()
 
   return self
-end
-
-function Async:is_active()
-  if not self.handle then
-    return false
-  end
-
-  return (not self.handle:is_closing()) and self
 end
 
 function Async:kill(signum)

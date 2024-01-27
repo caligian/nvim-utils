@@ -2,8 +2,6 @@ require "nvim-utils.Autocmd"
 
 --- @class kbd
 Kbd = class("Kbd", {
-  "require",
-  "loadfile",
   "main",
   "from_dict",
   "buffer",
@@ -223,6 +221,8 @@ function Kbd.from_dict(specs)
   return out
 end
 
-Kbd.main = vim.schedule_wrap(function()
+function Kbd.load_configs()
   return Kbd.from_dict(require_config "kbds" or {})
-end)
+end
+
+Kbd.main = vim.schedule_wrap(Kbd.load_configs)

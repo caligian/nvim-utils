@@ -7,7 +7,7 @@ local create_augroup = vim.api.nvim_create_augroup
 
 Autocmd = class("Autocmd", {
   "loadfile",
-  "require",
+  "load_configs",
   "main",
   "from_dict",
   "map",

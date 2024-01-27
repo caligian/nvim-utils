@@ -4,11 +4,9 @@ require "nvim-utils.logger"
 
 Plugin = class("Plugin", {
   "setup_lazy",
-  "loadfile_all",
-  "require_all",
   "list",
-  "configure_all",
   "lazy_spec",
+  'main',
 })
 
 function Plugin:init(name, opts)
@@ -42,12 +40,6 @@ function Plugin:init(name, opts)
       spec = {},
     }
 
-  self.configureall = nil
-  self.loadfile_all = nil
-  self.lazy_spec = nil
-  self.main = nil
-  self.setup_lazy = nil
-  self.require_all = nil
   opts = copy(opts)
   opts.name = name
   dict.merge(self, opts)
@@ -77,29 +69,14 @@ function Plugin.list()
   return fs
 end
 
-function Plugin:require()
-  local name = self.name
-  local req_name = "core.plugins." .. name
-  local ok, msg = pcall(require, req_name)
-  local userluapath = user.user_dir .. "/plugins/" .. name .. ".lua"
-
-  if not ok then
-    msg = {}
-  end
-
-  if is_file(userluapath) then
-    requirex("user.plugins." .. name, function(user_conf)
-      dict.merge(msg, user_conf)
-    end)
-  end
-
-  return dict.merge(self, msg)
+function Plugin:load_config()
+  return dict.merge(self, require_plugin(self.name) or {})
 end
 
 function Plugin:configure()
   vim.schedule(function()
     xpcall(function()
-      self:require()
+      self:load_config()
 
       if self.setup then
         self:setup()
@@ -125,6 +102,7 @@ local function _set_autocmds(self, autocmds)
     spec[2] = spec[2] or {}
     spec[2].name = name
     spec[2].desc = spec[2].desc or name
+
     Autocmd(unpack(spec))
   end)
 end
