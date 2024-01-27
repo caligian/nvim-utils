@@ -187,12 +187,12 @@ function Autocmd.from_dict(specs)
   return out
 end
 
-function Autocmd.require()
+function Autocmd.load_configs()
   return Autocmd.from_dict(require_config "autocmds" or {})
 end
 
 Autocmd.main = vim.schedule_wrap(function()
-  return Autocmd.require()
+  return Autocmd.load_configs()
 end)
 
 return Autocmd

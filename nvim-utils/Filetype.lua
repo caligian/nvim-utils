@@ -1,5 +1,4 @@
 require "nvim-utils.Autocmd"
--- require "nvim-utils.Job"
 require "nvim-utils.Async"
 require "nvim-utils.Buffer"
 require "nvim-utils.Kbd"
@@ -7,12 +6,12 @@ local lsp = require "nvim-utils.lsp"
 
 Filetype = class("Filetype", {
   "setup_lsp_all",
-  "buffer",
   "from_dict",
+  'load_configs',
   "jobs",
   "list",
   "main",
-  "_list_configs",
+  "list_configs",
   "_resolve",
   "get_workspace",
   "_find_workspace",
@@ -73,6 +72,7 @@ function Filetype._find_workspace(start_dir, pats, maxdepth, _depth)
   for i = 1, #pats do
     local pat = pats[i]
     for j = 1, #children do
+      ---@diagnostic disable-next-line: need-check-nil
       if children[j]:match(pat) then
         return start_dir
       end
@@ -115,42 +115,22 @@ local function get_name(x)
 end
 
 function Filetype.list_configs()
-  local builtin_files = {
-    "cpp",
-    "cs",
-    "elixir",
-    "erlang",
-    "fsharp",
-    "go",
-    "javascript",
-    "julia",
-    "kbds",
-    "lua",
-    "mysql",
-    "netrw",
-    "norg",
-    "ocaml",
-    "python",
-    "racket",
-    "r",
-    "ruby",
-    "rust",
-    "sh",
-    "sql",
-    "tex",
-    "zsh",
-  }
+  local core = list.map(Path.ls(user.paths.config .. "/lua/core/ft"), get_name)
+  local user_path = Path.join(user.paths.user, "lua", "user", "ft")
+  local userconf = Path.is_dir(user_path) and Path.ls(user_path)
+  userconf = userconf and list.map(userconf, get_name)
 
-  local user_dir = user.user_dir .. "/filetype"
-  if is_dir(user_dir) then
-    local files = vim.fn.glob(user_dir .. "/*.lua")
-    files = list.map(files, function(x)
-      return vim.fs.basename(x):gsub("%.lua", "")
-    end)
-    return list.union(builtin_files, files)
+  if userconf then
+    return list.union(core, userconf)
+  else
+    return core
   end
+end
 
-  return builtin_files
+function Filetype.load_configs()
+  list.each(Filetype.list_configs(), function(ft)
+    Filetype(ft):load_config()
+  end)
 end
 
 --------------------------------------------------
@@ -403,7 +383,6 @@ end
 
 --------------------------------------------------
 --- @class Filetype
-Filetype.buffer = namespace "Filetype.buffer"
 
 function Filetype:init(name)
   local already = Filetype._resolve(name)
@@ -414,36 +393,30 @@ function Filetype:init(name)
   local luafile = name .. ".lua"
 
   self.name = name
-
-  self.requires = {
-    config = "nvim-utils.filetype." .. name,
-    user_config = "user.filetype." .. name,
-  }
-
   self.paths = {
-    config_path = Path.join(vim.fn.stdpath "config", "lua", "core", "filetype", luafile),
-    user_config = Path.join(user.user_dir, "user", "filetype", luafile),
+    config = Path.join(user.paths.config, "lua", "core", "ft", luafile),
+    user = Path.join(user.paths.user, "lua", "user", "ft", luafile),
   }
-
+  self.requires = {
+    config = "core.ft." .. name,
+    user_config = "user.ft." .. name,
+  }
   self.enabled = {
     mappings = {},
     autocmds = {},
   }
-
   self.jobs = {}
   self.trigger = false
   self.mappings = false
   self.autocmds = false
   self.buf_opts = false
-  self.win_opts = false
-  self.on = false
   self.augroup = "UserFiletype" .. name:gsub("^[a-z]", string.upper)
 
   nvim.create.autocmd("FileType", {
     pattern = name,
     callback = function(_)
       pcall(function()
-        self:require()
+        self:load_config()
       end)
     end,
   })
@@ -454,21 +427,23 @@ function Filetype:init(name)
   return self
 end
 
-function Filetype.buffer:__call(bufnr)
-  if not Buffer.exists(bufnr) then
-    return
+function Filetype:load_user_config()
+  if Path.is_file(self.paths.user) then
+    local out = requirex(self.requires.user)
+    if out and is_table(out) then
+      return out
+    end
   end
-
-  local ft = Buffer.filetype(bufnr)
-  if #ft == 0 then
-    return
-  end
-
-  return Filetype(ft)
 end
 
-function Filetype:require()
-  return dict.merge(self, require_config("filetype." .. self.name) or {})
+function Filetype:load_config()
+  local user_conf = self:load_user_config() or {}
+  local builtin = Path.is_file(self.paths.config) and require(self.requires.config)
+  if not user_config and not builtin then
+    return
+  end
+
+  return dict.merge(self, builtin, user_config)
 end
 
 function Filetype:map(mode, ks, cb, opts)
@@ -560,6 +535,7 @@ function Filetype:get_command(bufnr, cmd_type, cmd_for)
     return
   end
 
+  ---@diagnostic disable-next-line: param-type-mismatch
   return Filetype._get_command_and_opts(bufnr, cmd_type, self:query(cmd_type), cmd_for)
 end
 
@@ -660,29 +636,24 @@ end
 function Filetype:setup()
   vim.schedule(function()
     xpcall(function()
-      self:require()
+      self:load_config()
       self:set_buf_opts()
       self:set_commands()
       self:set_autocmds()
       self:set_mappings()
-      Kbd.from_dict(default_mappings)
     end, function(msg)
-      logger:warn(warn .. "\n" .. dump(self:get_attribs()))
+      logger:warn(msg .. "\n" .. dump(self:get_attribs()))
     end)
   end)
 end
 
 Filetype.setup_lsp_all = vim.schedule_wrap(function()
   list.each(Filetype.list_configs(), function(ft)
-    Filetype(ft):require():setup_lsp()
+    Filetype(ft):load_config():setup_lsp()
   end)
 end)
 
 Filetype.main = vim.schedule_wrap(function()
-  requirex("nvim-utils.defaults.filetype.kbds", function(mappings)
-    Kbd.from_dict(mappings)
-  end)
-
   list.each(Filetype.list_configs(), function(ft)
     Filetype(ft):setup()
   end)

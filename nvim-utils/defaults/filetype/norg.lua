@@ -1,2 +1,0 @@
-local norg = {}
-return norg

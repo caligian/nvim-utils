@@ -164,7 +164,9 @@ function require_config(mod_name)
   local core_path = "nvim-utils.defaults." .. mod_name
 
   return requirex(core_path, function(core)
-    local user_path = user.user_dir .. "/" .. mod_name
+    mod_name = join(strsplit('user.' .. mod_name, "%."), "/")
+    local user_path = user.user_dir .. "/" .. mod_name .. '.lua'
+
     if is_file(user_path) then
       return requirex("user." .. mod_name, function(user_conf)
         return dict.merge(core, user_config)

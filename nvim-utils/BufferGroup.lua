@@ -13,7 +13,7 @@ function BufferGroup:reinclude_buffer(bufnr)
   self.buffers[bufnr] = true
   self.exclude[bufnr] = nil
 
-  dict.set(user.buffers, { bufnr, "buffer_groups" }, self.name)
+  dict.set(user.buffers, { bufnr, "buffer_groups", self.name }, true)
 
   return true
 end
@@ -29,7 +29,6 @@ function BufferGroup:create_reinclude_buffers_picker()
     entry_maker = function(obj)
       obj = tonumber(obj)
       local name = Buffer.get_name(obj)
-
       return {
         display = name,
         value = name,
@@ -40,15 +39,15 @@ function BufferGroup:create_reinclude_buffers_picker()
   }
 
   user.telescope()
-  local function default_action(bufnr)
-    list.each(user.telescope:selected(bufnr, true), function(obj)
-      self:reinclude_buffer(obj.bufnr)
-    end)
+  local mod = user.telescope:module()
+
+  function mod.multi_reinclude(sel)
+    self:reinclude_buffer(sel.bufnr)
   end
 
   return user.telescope:create_picker(
     excluded,
-    { default_action },
+    { mod.multi_reinclude },
     { prompt_title = "reinclude buffers for " .. self.name }
   )
 end
@@ -369,12 +368,12 @@ function BufferGroup:init(name, event, pattern, opts)
   return self
 end
 
-function BufferGroup.require()
+function BufferGroup.load_configs()
   return BufferGroup.from_dict(require_config "buffer_groups")
 end
 
 BufferGroup.main = vim.schedule_wrap(function()
-  BufferGroup.require()
+  BufferGroup.load_configs()
 
   Kbd.map("n", "<leader>>", function()
     BufferGroup.run_main_picker()

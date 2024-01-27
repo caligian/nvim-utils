@@ -77,16 +77,14 @@ function T:create_picker(items, mappings, opts)
     local default = mappings[1]
 
     opts.attach_mappings = function(_, map)
-      if default then
-        map("n", "<CR>", default, { desc = "default action" })
-      end
+      for i = 1, #mappings do
+        local m = mappings[i]
 
-      if #mappings < 2 then
-        return true
-      end
+        if is_function(m) then
+          m = {{'i', 'n'}, '<CR>', m, {}}
+        end
 
-      for i = 2, #mappings do
-        local mode, ks, cb, opts = unpack(mappings[i])
+        local mode, ks, cb, opts = unpack(m)
         opts = opts or {}
         opts = is_string(opts) and { desc = opts } or opts
         map(mode, ks, cb, opts)
