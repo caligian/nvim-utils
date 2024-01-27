@@ -6,7 +6,7 @@ schedule = vim.schedule
 schedule_wrap = vim.schedule_wrap
 
 function err_writeln(...)
-  local args = {...}
+  local args = { ... }
 
   for i = 1, #args do
     if is_number(args[i]) then
@@ -20,7 +20,7 @@ function err_writeln(...)
 end
 
 function is_path(x)
-  local x = vim.loop.fs_stat(x)
+  x = vim.loop.fs_stat(x)
   if not x then
     return
   end
@@ -181,9 +181,9 @@ function require_config(default)
 
   local utils_require_path = "nvim-utils.defaults." .. default
   local core_require_path = "core.defaults." .. default
-  local user_require_path = 'user.defaults.' .. default
-  local user_path = Path.join(user.paths.user, 'lua', 'user', 'defaults', default .. '.lua')
-  local core_path = Path.join(user.paths.config, 'lua', 'core', 'defaults', default .. '.lua')
+  local user_require_path = "user.defaults." .. default
+  local user_path = Path.join(user.paths.user, "lua", "user", "defaults", default .. ".lua")
+  local core_path = Path.join(user.paths.config, "lua", "core", "defaults", default .. ".lua")
   local user_conf = is_file(user_path) and requirex(user_require_path)
   local core_conf = is_file(core_path) and requirex(core_require_path)
   local utils_conf = requirex(utils_require_path) or {}
@@ -203,18 +203,18 @@ function require_plugin(plugin)
   assert_is_a.string(plugin)
 
   local core_require_path = "core.plugins." .. plugin
-  local user_require_path = 'user.plugins.' .. plugin
-  local user_path = Path.join(user.paths.user, 'lua', 'user', 'plugins', plugin .. '.lua')
-  local core_path = Path.join(user.paths.config, 'lua', 'core', 'plugins', plugin .. '.lua')
+  local user_require_path = "user.plugins." .. plugin
+  local user_path = Path.join(user.paths.user, "lua", "user", "plugins", plugin .. ".lua")
+  local core_path = Path.join(user.paths.config, "lua", "core", "plugins", plugin .. ".lua")
   local user_conf = is_file(user_path) and requirex(user_require_path)
   local core_conf = is_file(core_path) and requirex(core_require_path)
-  
+
   if not core_conf then
-    core_conf = is_file(core_path:gsub('%.lua', '/init.lua')) and requirex(core_require_path)
+    core_conf = is_file(core_path:gsub("%.lua", "/init.lua")) and requirex(core_require_path)
   end
 
   if not user_conf then
-    user_conf = is_file(user_path:gsub('%.lua', '/init.lua')) and requirex(user_require_path)
+    user_conf = is_file(user_path:gsub("%.lua", "/init.lua")) and requirex(user_require_path)
   end
 
   if core_conf and user_conf then
@@ -230,9 +230,9 @@ function require_ftconfig(ft)
   assert_is_a.string(ft)
 
   local core_require_path = "core.ft." .. ft
-  local user_require_path = 'user.ft.' .. ft
-  local user_path = Path.join(user.paths.user, 'lua', 'user', 'ft', ft .. '.lua')
-  local core_path = Path.join(user.paths.config, 'lua', 'core', 'ft', ft .. '.lua')
+  local user_require_path = "user.ft." .. ft
+  local user_path = Path.join(user.paths.user, "lua", "user", "ft", ft .. ".lua")
+  local core_path = Path.join(user.paths.config, "lua", "core", "ft", ft .. ".lua")
   local user_conf = is_file(user_path) and requirex(user_require_path)
   local core_conf = is_file(core_path) and requirex(core_require_path)
 
