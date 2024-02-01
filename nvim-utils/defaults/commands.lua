@@ -7,7 +7,7 @@ local function compile_and_run(lines)
 
   local compiled, err = loadstring(lines)
   if err then
-    tostderr(err)
+    err_writeln(err)
   elseif compiled then
     compiled()
   end

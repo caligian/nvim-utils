@@ -34,7 +34,6 @@ function Plugin:init(name, opts)
     or {
       autocmds = false,
       mappings = false,
-      user_config_require_path = "user.plugins." .. name,
       config_require_path = "core.plugins." .. name,
       setup = function() end,
       spec = {},

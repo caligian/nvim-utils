@@ -7,7 +7,7 @@ local GAMMA = 2.4
 
 function highlight(hi)
   hi = hi or "Normal"
-  local out = nvimexec(":hi " .. hi, true)
+  local out = nvim_exec(":hi " .. hi, true)
   if not out or #out == 0 then
     return
   end

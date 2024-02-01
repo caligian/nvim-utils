@@ -20,4 +20,13 @@ return function(opts)
   require "nvim-utils.Terminal"
   require "nvim-utils.REPL"
   require "nvim-utils.telescope_utils"
+
+  nvim.create.autocmd({ "BufDelete" }, {
+    pattern = "*",
+    callback = function(opts)
+      if user.buffers[opts.buf] then
+        user.buffers[opts.buf] = nil
+      end
+    end,
+  })
 end

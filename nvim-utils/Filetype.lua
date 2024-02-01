@@ -115,16 +115,7 @@ local function get_name(x)
 end
 
 function Filetype.list_configs()
-  local core = list.map(Path.ls(user.paths.config .. "/lua/core/ft"), get_name)
-  local user_path = Path.join(user.paths.user, "lua", "user", "ft")
-  local userconf = Path.is_dir(user_path) and Path.ls(user_path)
-  userconf = userconf and list.map(userconf, get_name)
-
-  if userconf then
-    return list.union(core, userconf)
-  else
-    return core
-  end
+  return list.map(Path.ls(user.config_dir .. "/lua/core/ft"), get_name)
 end
 
 function Filetype.load_configs()
@@ -393,14 +384,8 @@ function Filetype:init(name)
   local luafile = name .. ".lua"
 
   self.name = name
-  self.paths = {
-    config = Path.join(user.paths.config, "lua", "core", "ft", luafile),
-    user = Path.join(user.paths.user, "lua", "user", "ft", luafile),
-  }
-  self.requires = {
-    config = "core.ft." .. name,
-    user_config = "user.ft." .. name,
-  }
+  self.config_path = Path.join(user.config_dir, "lua", "core", "ft", luafile)
+  self.config_require_path = "core.ft." .. name
   self.enabled = {
     mappings = {},
     autocmds = {},
@@ -426,15 +411,6 @@ function Filetype:init(name)
 
   --- @type Filetype
   return self
-end
-
-function Filetype:load_user_config()
-  if Path.is_file(self.paths.user) then
-    local out = requirex(self.requires.user)
-    if out and is_table(out) then
-      return out
-    end
-  end
 end
 
 function Filetype:load_config()
@@ -622,7 +598,7 @@ function Filetype:set_commands(commands)
       dict.each(commands, function(name, cmd)
         cmd[2] = copy(cmd[2] or {})
         cmd[2].buffer = opts.buf
-        mkcommand(name, cmd[1], cmd[2])
+        nvim_command(name, cmd[1], cmd[2])
       end)
     end,
   })

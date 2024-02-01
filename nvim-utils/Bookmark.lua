@@ -4,7 +4,7 @@ require "nvim-utils.Win"
 require "nvim-utils.Autocmd"
 
 Bookmark = namespace()
-Bookmark.path = user.paths.bookmarks or (vim.fn.stdpath "data" .. "/bookmarks.lua")
+Bookmark.path = user.bookmarks_path
 
 function Bookmark.dump()
   local fh = io.open(Bookmark.path, "w")

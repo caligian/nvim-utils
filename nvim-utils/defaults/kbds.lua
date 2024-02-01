@@ -199,18 +199,11 @@ return {
     withopts "Toggle Zen mode",
   },
 
-  open_doom_config = {
-    "n",
-    "fP",
-    ":chdir ~/.config/nvim <bar> e .<CR>",
-    withopts { desc = "Open framework config" },
-  },
-
-  open_user_config = {
+  open_config = {
     "n",
     "fp",
-    ":chdir ~/.nvim <bar> e .<CR>",
-    withopts { desc = "Open user config" },
+    ":chdir ~/.config/nvim <bar> e .<CR>",
+    withopts { desc = "Open framework config" },
   },
 
   reload_buffer = {

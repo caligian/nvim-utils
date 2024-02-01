@@ -49,36 +49,31 @@ end
 --------------------------------------------------
 local data_dir = vim.fn.stdpath "data"
 local dir = vim.fn.stdpath "config"
-local user_dir = table.concat({ os.getenv "HOME", ".nvim" }, "/")
 local plugins_dir = table.concat({ data_dir, "lazy" }, "/")
 local log_path = table.concat({ data_dir, "messages" }, "/")
 
-local paths = {
-  config = dir,
-  user = user_dir,
-  data = data_dir,
-  plugins = plugins_dir,
-  logs = log_path,
-  servers = table.concat({ data_dir, "lsp-servers" }, "/"),
+user = {
+  plugins = { exclude = {} },
+  jobs = {},
+  filetypes = {},
+  buffers = {},
+  terminals = {},
+  kbds = {},
+  repls = {},
+  bookmarks = {},
+  autocmds = {},
+  buffer_groups = {},
+  paths = paths,
 }
 
-user = user
-  or {
-    plugins = { exclude = {} },
-    jobs = {},
-    filetypes = {},
-    buffers = {},
-    terminals = {},
-    kbds = {},
-    repls = {},
-    bookmarks = {},
-    autocmds = {},
-    buffer_groups = {},
-    paths = paths,
-    user_dir = (os.getenv "HOME" .. "/.nvim/lua"),
-    luarocks_dir = (os.getenv "HOME" .. "/" .. ".luarocks"),
-    lazy_path = (vim.fn.stdpath "data" .. "/lazy/lazy.nvim"),
-  }
+user.luarocks_dir = (os.getenv "HOME" .. "/" .. ".luarocks")
+user.lazy_path = (vim.fn.stdpath "data" .. "/lazy/lazy.nvim")
+user.config_dir = dir
+user.data_dir = data_dir
+user.plugins_dir = plugins_dir
+user.log_path = log_path  
+user.lsp_servers_path = Path.join(dir, 'lsp_servers')
+user.bookmarks_path = Path.join(data_dir, 'bookmarks.lua')
 
 local _winapi = {}
 local _bufapi = {}
@@ -181,68 +176,42 @@ function require_config(default)
 
   local utils_require_path = "nvim-utils.defaults." .. default
   local core_require_path = "core.defaults." .. default
-  local user_require_path = "user.defaults." .. default
-  local user_path = Path.join(user.paths.user, "lua", "user", "defaults", default .. ".lua")
-  local core_path = Path.join(user.paths.config, "lua", "core", "defaults", default .. ".lua")
-  local user_conf = is_file(user_path) and requirex(user_require_path)
+  local core_path = Path.join(user.config_dir, "lua", "core", "defaults", default .. ".lua")
   local core_conf = is_file(core_path) and requirex(core_require_path)
   local utils_conf = requirex(utils_require_path) or {}
+  local res = utils_conf
 
-  if core_conf and user_conf then
-    return dict.merge(utils_conf, core_conf, user_conf)
-  elseif core_conf then
-    return dict.merge(utils_conf, core_conf)
-  elseif user_conf then
-    return dict.merge(utils_conf, user_conf)
-  elseif not is_empty(utils_conf) then
-    return utils_conf
+  if core_conf then
+    dict.merge(res, core_conf)
   end
+
+  if size(res) == 0 then
+    return
+  end
+
+  return res
 end
 
 function require_plugin(plugin)
   assert_is_a.string(plugin)
 
   local core_require_path = "core.plugins." .. plugin
-  local user_require_path = "user.plugins." .. plugin
-  local user_path = Path.join(user.paths.user, "lua", "user", "plugins", plugin .. ".lua")
-  local core_path = Path.join(user.paths.config, "lua", "core", "plugins", plugin .. ".lua")
-  local user_conf = is_file(user_path) and requirex(user_require_path)
+  local core_path = Path.join(user.config_dir, "lua", "core", "plugins", plugin .. ".lua")
   local core_conf = is_file(core_path) and requirex(core_require_path)
 
   if not core_conf then
     core_conf = is_file(core_path:gsub("%.lua", "/init.lua")) and requirex(core_require_path)
   end
 
-  if not user_conf then
-    user_conf = is_file(user_path:gsub("%.lua", "/init.lua")) and requirex(user_require_path)
-  end
-
-  if core_conf and user_conf then
-    return dict.merge(core_conf, user_conf)
-  elseif core_conf then
-    return core_conf
-  end
-
-  return user_conf
+  return core_conf
 end
 
 function require_ftconfig(ft)
   assert_is_a.string(ft)
-
   local core_require_path = "core.ft." .. ft
-  local user_require_path = "user.ft." .. ft
-  local user_path = Path.join(user.paths.user, "lua", "user", "ft", ft .. ".lua")
-  local core_path = Path.join(user.paths.config, "lua", "core", "ft", ft .. ".lua")
-  local user_conf = is_file(user_path) and requirex(user_require_path)
-  local core_conf = is_file(core_path) and requirex(core_require_path)
+  local core_path = Path.join(user.config_dir, "lua", "core", "ft", ft .. ".lua")
 
-  if core_conf and user_conf then
-    return dict.merge(core_conf, user_conf)
-  elseif core_conf then
-    return core_conf
-  end
-
-  return user_conf
+  return is_file(core_path) and requirex(core_require_path)
 end
 
 --------------------------------------------------
@@ -262,14 +231,14 @@ function vimsize()
   return { width, height }
 end
 
-function tostderr(...)
+function err_writeln(...)
   for _, s in ipairs { ... } do
     s = not is_string(s) and dump(s) or s
     vim.api.nvim_err_writeln(s)
   end
 end
 
-function nvimexec(s, as_string)
+function nvim_exec(s, as_string)
   local ok, res = pcall(vim.api.nvim_exec2, s, { output = true })
   if ok and res and res.output then
     return not as_string and strsplit(res.output, "\n") or res.output
@@ -346,13 +315,13 @@ function killpid(pid, signal)
   return true
 end
 
-function mkcommand(name, callback, opts)
+function nvim_command(name, callback, opts)
   opts = copy(opts or {})
   local use = vim.api.nvim_create_user_command
   local buf
 
   if opts.buffer then
-    buf = opts.buffer == true and buffer.current() or opts.buffer
+    buf = opts.buffer == true and vim.fn.bufnr() or opts.buffer
     use = vim.api.nvim_buf_create_user_command
   end
 

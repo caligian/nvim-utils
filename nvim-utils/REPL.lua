@@ -74,7 +74,7 @@ function REPL:init(bufnr, opts)
 
   local cmd, _opts = ftobj:get_command(bufnr, "repl", given_type)
   if not cmd then
-    tostderr("repl: no command found for filetype " .. dump(ft))
+    err_writeln("repl: no command found for filetype " .. dump(ft))
     return
   else
     local check_name = ftobj.name .. "." .. given_type .. "." .. cmd[1]
@@ -142,7 +142,7 @@ function REPL.set_mappings()
       if not is_running then
         self:start()
         if not self:is_running() then
-          tostderr("could not start REPL for " .. tp .. " with cmd: " .. self.cmd)
+          err_writeln("could not start REPL for " .. tp .. " with cmd: " .. self.cmd)
         else
           print("started REPL for " .. tp .. " with cmd: " .. self.cmd)
         end

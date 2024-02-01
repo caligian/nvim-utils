@@ -247,7 +247,7 @@ function Async.format_buffer(bufnr, cmd, opts)
     local err = output.stderr
 
     if #err > 0 then
-      tostderr(join(err, "\n"))
+      err_writeln(join(err, "\n"))
       return
     end
 
