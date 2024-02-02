@@ -298,11 +298,11 @@ local function validate(cmd_type, cmd)
     },
   }
 
-  params { command = { common, cmd } }
+  check_args[common].command(cmd)
 
   local test = validators[cmd_type]
   if test then
-    params { command = { test, cmd } }
+    check_args[test].command(test)
   end
 
   assert(is_command(cmd))
@@ -605,27 +605,27 @@ function Filetype:set_commands(commands)
 end
 
 function Filetype:setup()
-  vim.schedule(function()
-    xpcall(function()
-      self:load_config()
+  xpcall(function()
+    self:load_config()
+    vim.schedule(function ()
       self:set_buf_opts()
       self:set_commands()
       self:set_autocmds()
       self:set_mappings()
-    end, function(msg)
-      logger:warn(msg .. "\n" .. dump(self:get_attribs()))
     end)
-  end)
+  end, function(msg)
+  logger:warn(msg .. "\n" .. dump(self:get_attribs()))
+end)
 end
 
-Filetype.setup_lsp_all = vim.schedule_wrap(function()
+Filetype.setup_lsp_all = function()
   list.each(Filetype.list_configs(), function(ft)
     Filetype(ft):load_config():setup_lsp()
   end)
-end)
+end
 
-Filetype.main = vim.schedule_wrap(function()
+Filetype.main = function()
   list.each(Filetype.list_configs(), function(ft)
     Filetype(ft):setup()
   end)
-end)
+end

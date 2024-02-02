@@ -314,10 +314,7 @@ function Buffer.info(bufnr, all)
 end
 
 function Buffer.list(bufnr, opts)
-  params {
-    bufnr = { "number", bufnr },
-    ["opts?"] = { "table", opts },
-  }
+  check_args(bufnr, opts or {}) { 'number', 'table' }
 
   local found = vim.fn.getbufinfo(bufnr)
   local out = keys(found)

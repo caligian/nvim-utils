@@ -73,20 +73,27 @@ function Plugin:load_config()
 end
 
 function Plugin:configure()
-  vim.schedule(function()
-    xpcall(function()
-      self:load_config()
+  local function setup()
+    self:load_config()
+    self:set_autocmds()
+    self:set_mappings()
 
-      if self.setup then
-        self:setup()
-      end
+    if self.setup then
+      self:setup()
+    end
+  end
 
-      self:set_autocmds()
-      self:set_mappings()
-    end, function(msg)
-      logger:warn(msg)
-      logger:debug(dump(items(self)))
-    end)
+  xpcall(
+  function()
+    if self.name == 'colorscheme' or self.name == 'statusline' then
+      setup()
+    else
+      vim.schedule(setup)
+    end
+  end, 
+  function(msg)
+    logger:warn(msg)
+    logger:debug(dump(items(self)))
   end)
 end
 
