@@ -1,4 +1,4 @@
-user.telescope = namespace()
+user.telescope = ns()
 local T = user.telescope
 
 function T:__call()

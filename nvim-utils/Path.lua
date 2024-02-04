@@ -3,7 +3,7 @@ require "lua-utils.table"
 
 local lpeg = require "lpeg"
 local lfs = require "lfs"
-Path = dict.merge(namespace(), lfs)
+Path = dict.merge(ns(), lfs)
 Path.ln = Path.link
 Path.stat = Path.attributes
 Path.lnstat = Path.symlinkattributes

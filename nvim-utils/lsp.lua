@@ -1,4 +1,4 @@
-local lsp = namespace()
+local lsp = ns()
 
 lsp.diagnostic = {
   virtual_text = false,
@@ -53,7 +53,7 @@ function lsp.fix_omnisharp(client, _)
         "extension_method_name",
         "property_name",
         "event_name",
-        "namespace_name",
+        "ns_name",
         "label_name",
         "xml_doc_comment_attribute_name",
         "xml_doc_comment_attribute_quotes",

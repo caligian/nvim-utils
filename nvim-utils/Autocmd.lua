@@ -6,16 +6,16 @@ local getinfo = vim.api.nvim_get_autocmds
 local create_augroup = vim.api.nvim_create_augroup
 
 Autocmd = class("Autocmd", {
-  "loadfile",
+  static = {"loadfile",
   "load_configs",
   "main",
   "from_dict",
   "map",
   "find",
-  "buffer",
+  "buffer"}
 })
 
-Autocmd.buffer = namespace()
+Autocmd.buffer = ns()
 
 function Autocmd:init(event, opts)
   local pattern = opts.pattern

@@ -1,6 +1,6 @@
 require "nvim-utils.Buffer"
 
-Terminal = class("Terminal", { "stop_all" })
+Terminal = class("Terminal", {static = { "stop_all" }})
 
 Terminal.exceptions = {
   invalid_command = "expected valid command",

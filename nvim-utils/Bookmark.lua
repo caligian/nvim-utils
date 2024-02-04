@@ -3,7 +3,7 @@ require "nvim-utils.Buffer"
 require "nvim-utils.Win"
 require "nvim-utils.Autocmd"
 
-Bookmark = namespace()
+Bookmark = ns()
 Bookmark.path = user.bookmarks_path
 
 function Bookmark.dump()

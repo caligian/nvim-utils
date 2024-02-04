@@ -1,7 +1,7 @@
 local float = {}
 
 --------------------------------------------------
-local function from_percent(bufnr, current, width, min)
+local function from_percent(current, width, min)
   width = width or 0.5
 
   assert(width ~= 0, "width cannot be 0")
@@ -75,8 +75,8 @@ function float.float(bufnr, opts)
     end
     center = center == true and { 0.8, 0.8 } or center
     local width, height = unpack(center)
-    width = math.floor(from_percent(bufnr, current_width, width, 10))
-    height = math.floor(from_percent(bufnr, current_height, height, 5))
+    width = math.floor(from_percent(current_width, width, 10))
+    height = math.floor(from_percent(current_height, height, 5))
     local col = (current_width - width) / 2
     local row = (current_height - height) / 2
     opts.width = width
@@ -88,38 +88,31 @@ function float.float(bufnr, opts)
       current_width = editor_size[1]
       current_height = editor_size[2]
     end
-
     panel = panel == true and 0.3 or panel
+    panel = from_percent(current_width, panel, 10)
     opts.row = 0
     opts.col = 1
-    opts.width = from_percent(bufnr, current_width, panel, 5)
     opts.height = current_height
-
     if reverse then
       opts.col = current_width - opts.width
     end
   elseif dock then
     dock = dock == true and 0.3 or dock
-
     if opts.relative == "editor" then
       current_width = editor_size[1]
       current_height = editor_size[2]
     end
-
+    dock = from_percent(current_height, dock, 10)
+    opts.height = dock
     opts.col = 0
-    opts.row = opts.height - dock
-    opts.height = from_percent(bufnr, current_height, dock, 5)
+    opts.row = math.floor(current_height - dock)
     opts.width = current_width > 5 and current_width - 2 or current_width
-
     if reverse then
-      opts.row = opts.height
+      opts.row = 0
     end
-
-    opts.row = math.floor(opts.row)
   end
 
   local winid = vim.api.nvim_open_win(bufnr, focus, float.float_opts(opts))
-
   if winid == 0 then
     return false
   end
@@ -183,5 +176,7 @@ function float.get_float_config(bufnr)
 
   return ok
 end
+
+float.float(current_buf(), {dock = 10, reverse = false})
 
 return float

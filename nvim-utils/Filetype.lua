@@ -4,7 +4,7 @@ require "nvim-utils.Buffer"
 require "nvim-utils.Kbd"
 local lsp = require "nvim-utils.lsp"
 
-Filetype = class("Filetype", {
+Filetype = class("Filetype", {static = {
   "setup_lsp_all",
   "from_dict",
   'load_configs',
@@ -17,7 +17,7 @@ Filetype = class("Filetype", {
   "_find_workspace",
   "_get_command",
   "_get_command_and_opts",
-})
+}})
 
 function Filetype._resolve(name)
   assert_is_a(name, union("Filetype", "string", "number"))
@@ -280,7 +280,6 @@ local function validate(cmd_type, cmd)
   local sig = union("string", "function", "table")
 
   local common = {
-    __extra = true,
     ["buffer?"] = sig,
     ["workspace?"] = sig,
     ["dir?"] = sig,
@@ -288,12 +287,10 @@ local function validate(cmd_type, cmd)
 
   local validators = {
     repl = {
-      __extra = true,
       ["on_input?"] = "function",
       ["load_from_path?"] = "function",
     },
     formatter = {
-      __extra = true,
       ["stdin?"] = "boolean",
     },
   }
@@ -606,26 +603,24 @@ end
 
 function Filetype:setup()
   xpcall(function()
-    self:load_config()
-    vim.schedule(function ()
+      self:load_config()
       self:set_buf_opts()
       self:set_commands()
       self:set_autocmds()
       self:set_mappings()
-    end)
   end, function(msg)
   logger:warn(msg .. "\n" .. dump(self:get_attribs()))
 end)
 end
 
-Filetype.setup_lsp_all = function()
+Filetype.setup_lsp_all = vim.schedule_wrap(function()
   list.each(Filetype.list_configs(), function(ft)
     Filetype(ft):load_config():setup_lsp()
   end)
-end
+end)
 
-Filetype.main = function()
+Filetype.main = vim.schedule_wrap(function()
   list.each(Filetype.list_configs(), function(ft)
     Filetype(ft):setup()
   end)
-end
+end)

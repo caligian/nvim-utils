@@ -2,8 +2,8 @@ require "nvim-utils.Kbd"
 
 --- @class Buffer
 
-Buffer = namespace "Buffer"
-Buffer:include_module(nvim.buf)
+Buffer = ns "Buffer"
+Buffer:include(nvim.buf)
 
 function is_buffer(obj)
   return typeof(obj) == "Buffer"

@@ -1,15 +1,15 @@
 require "nvim-utils.Autocmd"
 
 --- @class kbd
-Kbd = class("Kbd", {
+Kbd = class("Kbd", {static = {
   "main",
   "from_dict",
   "buffer",
   "map",
   "noremap",
-})
+}})
 
-Kbd.buffer = namespace()
+Kbd.buffer = ns()
 
 local enable = vim.keymap.set
 local delete = vim.keymap.del

@@ -1,7 +1,7 @@
 require "nvim-utils.Terminal"
 require "nvim-utils.Filetype"
 
-REPL = class("REPL", { "set_mappings", "main" }, { parent = Terminal })
+REPL = class("REPL",  {parent = Terminal, static = { "set_mappings", "main" }})
 REPL.stop_all = nil
 
 function REPL.stop_all()
