@@ -177,6 +177,4 @@ function float.get_float_config(bufnr)
   return ok
 end
 
-float.float(current_buf(), {dock = 10, reverse = false})
-
 return float

@@ -1,23 +1,28 @@
 require "nvim-utils.Autocmd"
 require "nvim-utils.Async"
-require "nvim-utils.Buffer"
+require "nvim-utils.Buffer.Buffer"
 require "nvim-utils.Kbd"
 local lsp = require "nvim-utils.lsp"
 
-Filetype = class("Filetype", {static = {
-  "setup_lsp_all",
-  "from_dict",
-  'load_configs',
-  "jobs",
-  "list",
-  "main",
-  "list_configs",
-  "_resolve",
-  "get_workspace",
-  "_find_workspace",
-  "_get_command",
-  "_get_command_and_opts",
-}})
+Filetype = class(
+  "Filetype",
+  {
+    static = {
+      "setup_lsp_all",
+      "from_dict",
+      "load_configs",
+      "jobs",
+      "list",
+      "main",
+      "list_configs",
+      "_resolve",
+      "get_workspace",
+      "_find_workspace",
+      "_get_command",
+      "_get_command_and_opts",
+    },
+  }
+)
 
 function Filetype._resolve(name)
   assert_is_a(name, union("Filetype", "string", "number"))
@@ -295,11 +300,11 @@ local function validate(cmd_type, cmd)
     },
   }
 
-  check_args[common].command(cmd)
+  form[common].command(cmd)
 
   local test = validators[cmd_type]
   if test then
-    check_args[test].command(test)
+    form[test].command(test)
   end
 
   assert(is_command(cmd))
@@ -401,7 +406,7 @@ function Filetype:init(name)
         self:load_config()
       end)
     end,
-    desc = 'load config for ' .. self.name,
+    desc = "load config for " .. self.name,
   })
 
   user.filetypes[self.name] = self
@@ -603,14 +608,14 @@ end
 
 function Filetype:setup()
   xpcall(function()
-      self:load_config()
-      self:set_buf_opts()
-      self:set_commands()
-      self:set_autocmds()
-      self:set_mappings()
+    self:load_config()
+    self:set_buf_opts()
+    self:set_commands()
+    self:set_autocmds()
+    self:set_mappings()
   end, function(msg)
-  logger:warn(msg .. "\n" .. dump(self:get_attribs()))
-end)
+    logger:warn(msg .. "\n" .. dump(self:get_attribs()))
+  end)
 end
 
 Filetype.setup_lsp_all = vim.schedule_wrap(function()

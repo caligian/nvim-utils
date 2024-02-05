@@ -1,5 +1,5 @@
 require "nvim-utils.Kbd"
-require "nvim-utils.Buffer"
+require "nvim-utils.Buffer.Buffer"
 require "nvim-utils.Win"
 require "nvim-utils.Autocmd"
 

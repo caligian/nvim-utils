@@ -1,8 +1,9 @@
 require "nvim-utils.Kbd"
 
---- @class Buffer
-
-Buffer = ns "Buffer"
+--- @class Buffer : ns
+--- @field is_scratch? boolean
+--- @field id number
+Buffer = ns "Buffer" --[[@as Buffer]]
 Buffer:include(nvim.buf)
 
 function is_buffer(obj)
@@ -83,8 +84,8 @@ function Buffer:__call(bufnr_or_name, scratch, listed)
     return
   end
 
-  local obj = class "Buffer"
-  obj.init = init
+  local obj_mt = {type = 'Buffer', __tostring = dump} 
+  local obj = mtset({}, obj_mt)
 
   function obj:exists()
     if not self.id then
@@ -110,9 +111,7 @@ function Buffer:__call(bufnr_or_name, scratch, listed)
     end
 
     vim.api.nvim_buf_set_option(bufnr, "buftype", "nofile")
-
     vim.keymap.set({ "n", "i" }, "q", ":hide<CR>", { desc = "hide buffer", buffer = bufnr })
-
     obj.is_scratch = true
 
     return obj
@@ -314,7 +313,7 @@ function Buffer.info(bufnr, all)
 end
 
 function Buffer.list(bufnr, opts)
-  check_args(bufnr, opts or {}) { 'number', 'table' }
+  form(bufnr, opts or {}) { 'number', 'table' }
 
   local found = vim.fn.getbufinfo(bufnr)
   local out = keys(found)

@@ -1,4 +1,4 @@
-require "nvim-utils.Buffer"
+require "nvim-utils.Buffer.Buffer"
 
 Terminal = class("Terminal", {static = { "stop_all" }})
 

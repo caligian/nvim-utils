@@ -56,7 +56,7 @@ function setup:setup(opts)
   opts = opts or {}
   user = user or {}
 
-  check_args[{ 
+  form[{ 
     opt_lazy = { opt_enable = 'boolean', opt_path = 'string' },
     opt_luarocks = { opt_enable = 'boolean', opt_path = 'string' }
   }].options(opts)

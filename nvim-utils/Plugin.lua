@@ -85,7 +85,7 @@ function Plugin:configure()
 
   xpcall(
   function()
-    if self.name == 'colorscheme' or self.name == 'statusline' or self.name == 'telescope' then
+    if self.name == 'colorscheme' or self.name == 'statusline' then
       setup()
     else
       vim.schedule(setup)

@@ -1,1 +1,4 @@
-luarocks --local build
+#!/bin/bash
+
+rm -r $HOME/.config/nvim/lua/nvim-utils
+cp -r nvim-utils/ $HOME/.config/nvim/lua
