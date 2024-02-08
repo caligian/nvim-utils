@@ -4,25 +4,22 @@ require "nvim-utils.Buffer.Buffer"
 require "nvim-utils.Kbd"
 local lsp = require "nvim-utils.lsp"
 
-Filetype = class(
-  "Filetype",
-  {
-    static = {
-      "setup_lsp_all",
-      "from_dict",
-      "load_configs",
-      "jobs",
-      "list",
-      "main",
-      "list_configs",
-      "_resolve",
-      "get_workspace",
-      "_find_workspace",
-      "_get_command",
-      "_get_command_and_opts",
-    },
-  }
-)
+Filetype = class("Filetype", {
+  static = {
+    "setup_lsp_all",
+    "from_dict",
+    "load_configs",
+    "jobs",
+    "list",
+    "main",
+    "list_configs",
+    "_resolve",
+    "get_workspace",
+    "_find_workspace",
+    "_get_command",
+    "_get_command_and_opts",
+  },
+})
 
 function Filetype._resolve(name)
   assert_is_a(name, union("Filetype", "string", "number"))
@@ -130,6 +127,126 @@ function Filetype.load_configs()
 end
 
 --------------------------------------------------
+local function create_command(spec)
+  if is_string(spec) then
+    return { buffer = spec }
+  else
+    return spec
+  end
+end
+
+--------------------------------------------------
+--[[
+-- Same case for workspace and dir
+-- form1:
+{
+  buffer = {
+    --- such tables can be nested
+    [function (x) return x:match 'nvim' end] = function (x) return 'luajit ' .. x end,
+    [os.getenv('HOME')] = 'luajit'
+  },
+}
+
+-- form2:
+{
+  buffer = 'luajit'
+}
+--]]
+
+local match_command = ns()
+
+function match_command:match_path(spec, path)
+  local function add_path(s)
+    return template(s, { path = path })
+  end
+
+  local function process(value)
+    if is_string(value) then
+      return add_path(value)
+    elseif is_method(value) then
+      local cmd, _ = value(path)
+      if cmd then
+        return add_path(cmd)
+      end
+    elseif is_table(value) then
+      for key_1, value_1 in pairs(value) do
+        local ok = (is_string(key_1) and path:match(key_1)) or (is_method(key_1) and key_1(path))
+
+        if ok then
+          return process(value_1)
+        end
+      end
+    end
+  end
+
+  return process(spec)
+end
+
+function match_command:match(bufnr, spec, cmd_for)
+  local ok, msg = is_number(bufnr)
+  if ok then
+    ok, msg = Buffer.exists(bufnr)
+  end
+  if not ok then
+    error(msg)
+  end
+
+  local bufname = Buffer.get_name(bufnr)
+  local path
+  if not (cmd_for == "workspace" or cmd_for == "buffer" or cmd_for == "dir") then
+    error("expected any of workspace, dir, buffer, got " .. dump(cmd_for))
+  elseif cmd_for == "workspace" then
+    path = Filetype.get_workspace(bufnr, spec.root_dir, 4)
+    if not path then
+      error("not in workspace: " .. bufname)
+    end
+  elseif cmd_for == "dir" then
+    path = Path.dirname(bufname)
+  else
+    path = bufname
+  end
+
+  local ok = self:match_path(spec[cmd_for], path)
+  if not ok then
+    error("could not get any command for " .. path)
+  end
+  local opts = dict.filter(spec, function(key, _)
+    return not (key == "buffer" or key == "workspace" or key == "dir" or key == "root_dir")
+  end)
+
+  return ok, opts, path
+end
+
+function match_command:__call(spec)
+  local function get_fn(fn_type)
+    return function(bufnr)
+      return self:match(bufnr, spec, fn_type)
+    end
+  end
+
+  return {
+    buffer = get_fn "buffer",
+    workspace = get_fn "workspace",
+    dir = get_fn "dir",
+  }
+end
+
+function Filetype:get_command(bufnr, cmd_type, cmd_for)
+  assert(is_string(cmd_type))
+  assert(is_string(cmd_for))
+
+  local spec = self[cmd_type]
+  if not is_table(spec) then
+    error("invalid spec given " .. dump(cmd_type))
+  end
+  local cmd_maker = match_command(spec)
+  assert(cmd_maker[cmd_for], "cmd_for should be workspace, dir or buffer")
+
+  return cmd_maker[cmd_for](bufnr)
+end
+
+--[[
+--------------------------------------------------
 --- @alias command string | function | ({[1]: any, [2]: function})[]
 
 --- @class Command
@@ -149,14 +266,6 @@ end
 --- @param spec Command | command
 --- @return {[1]: string, [2]: string}
 local function match_command(p, spec)
-  --[[
-  lookup spec:
-  eg: {{is_string, string.upper}, {'^[0-9]+$', tonumber}, ...}
-
-  {<test>, <function>},
-  <test> = <function> | <lua pattern>
-  --]]
-
   local lookup_dict = function(x)
     local ok = is_table(x) and list.is_a(x, function(X)
       return #X == 2 and is_callable(X[2])
@@ -236,7 +345,7 @@ end
 --- @return get_command_return?, string?
 local function get_command(bufnr, spec)
   if not is_command(spec) then
-    local msg = [[expected string | {{test, callback}, ...}, got ]] .. dump(x)
+    local msg = 'expected string | {{test, callback}, ...}, got ' .. dump(x)
     return nil, msg
   elseif is_string(spec) then
     spec = { buffer = spec }
@@ -349,7 +458,7 @@ function Filetype._get_opts(spec)
 
   spec = is_string(spec) and { buffer = spec } or spec
 
-  return dict.filter_unless(spec --[[@as table]], function(key, _)
+  return dict.filter_unless(spec, function(key, _)
     return strmatch(key, "^buffer$", "^workspace$", "^dir$")
   end)
 end
@@ -373,6 +482,7 @@ function Filetype._get_command_and_opts(bufnr, cmd_type, spec, cmd_for)
   local opts = Filetype._get_opts(spec) or {}
   return cmd, opts
 end
+--]]
 
 --------------------------------------------------
 --- @class Filetype
@@ -503,14 +613,14 @@ function Filetype:enable_triggers(trigger)
   return true
 end
 
-function Filetype:get_command(bufnr, cmd_type, cmd_for)
-  if not Buffer.exists(bufnr) then
-    return
-  end
+--function Filetype:get_command(bufnr, cmd_type, cmd_for)
+--  if not Buffer.exists(bufnr) then
+--    return
+--  end
 
-  ---@diagnostic disable-next-line: param-type-mismatch
-  return Filetype._get_command_and_opts(bufnr, cmd_type, self:query(cmd_type), cmd_for)
-end
+--  ---@diagnostic disable-next-line: param-type-mismatch
+--  return Filetype._get_command_and_opts(bufnr, cmd_type, self:query(cmd_type), cmd_for)
+--end
 
 function Filetype:format_buffer_dir(bufnr)
   return self:format_buffer(bufnr, "dir")
@@ -522,15 +632,11 @@ end
 
 function Filetype:format_buffer(bufnr, cmd_for)
   local cmd, opts = self:get_command(bufnr, "formatter", cmd_for or "buffer")
-
   if not cmd then
     return
   end
-
   local bufname = Buffer.get_name(bufnr)
   local name = self.name .. ".formatter." .. cmd_for .. "." .. bufname
-
-  cmd = cmd[2]
   self.jobs[name] = Async.format_buffer(bufnr, cmd, opts)
   self.jobs[name]:start()
 
@@ -547,15 +653,13 @@ end
 
 function Filetype:compile_buffer(bufnr, action, cmd_for)
   cmd_for = cmd_for or "workspace"
-  local cmd, opts = self:get_command(bufnr, action, cmd_for)
+  local cmd, opts, p = self:get_command(bufnr, action, cmd_for)
   if not cmd then
     return
   end
 
   local bufname = Buffer.get_name(bufnr)
   local name = self.name .. "." .. cmd_for .. "." .. bufname
-  local p = cmd[1]
-  cmd = cmd[2]
   opts.split = true
   opts.shell = true
 
@@ -618,14 +722,14 @@ function Filetype:setup()
   end)
 end
 
-Filetype.setup_lsp_all = vim.schedule_wrap(function()
+Filetype.setup_lsp_all = function()
   list.each(Filetype.list_configs(), function(ft)
     Filetype(ft):load_config():setup_lsp()
   end)
-end)
+end
 
-Filetype.main = vim.schedule_wrap(function()
+Filetype.main = function()
   list.each(Filetype.list_configs(), function(ft)
     Filetype(ft):setup()
   end)
-end)
+end

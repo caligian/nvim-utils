@@ -81,7 +81,7 @@ function T:create_picker(items, mappings, opts)
         local m = mappings[i]
 
         if is_function(m) then
-          m = {{'i', 'n'}, '<CR>', m, {}}
+          m = { { "i", "n" }, "<CR>", m, {} }
         end
 
         local mode, ks, cb, opts = unpack(m)

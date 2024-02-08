@@ -56,9 +56,9 @@ function setup:setup(opts)
   opts = opts or {}
   user = user or {}
 
-  form[{ 
-    opt_lazy = { opt_enable = 'boolean', opt_path = 'string' },
-    opt_luarocks = { opt_enable = 'boolean', opt_path = 'string' }
+  form[{
+    opt_lazy = { opt_enable = "boolean", opt_path = "string" },
+    opt_luarocks = { opt_enable = "boolean", opt_path = "string" },
   }].options(opts)
 
   local lazy = opts.lazy
@@ -69,7 +69,7 @@ function setup:setup(opts)
 
   local luarocks = opts.luarocks
   if luarocks and luarocks.enable then
-    self.luarocks_dir = luarocks.path or (os.getenv('HOME') .. '.luarocks')
+    self.luarocks_dir = luarocks.path or (os.getenv "HOME" .. ".luarocks")
     self:setup_luarocks()
   end
 end

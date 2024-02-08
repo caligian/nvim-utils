@@ -84,7 +84,7 @@ function Buffer:__call(bufnr_or_name, scratch, listed)
     return
   end
 
-  local obj_mt = {type = 'Buffer', __tostring = dump} 
+  local obj_mt = { type = "Buffer", __tostring = dump }
   local obj = mtset({}, obj_mt)
 
   function obj:exists()
@@ -313,7 +313,7 @@ function Buffer.info(bufnr, all)
 end
 
 function Buffer.list(bufnr, opts)
-  form(bufnr, opts or {}) { 'number', 'table' }
+  form(bufnr, opts or {}) { "number", "table" }
 
   local found = vim.fn.getbufinfo(bufnr)
   local out = keys(found)

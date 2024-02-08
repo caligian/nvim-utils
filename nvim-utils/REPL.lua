@@ -1,7 +1,7 @@
 require "nvim-utils.Terminal"
 require "nvim-utils.Filetype"
 
-REPL = class("REPL",  {parent = Terminal, static = { "set_mappings", "main" }})
+REPL = class("REPL", { parent = Terminal, static = { "set_mappings", "main" } })
 REPL.stop_all = nil
 
 function REPL.stop_all()
@@ -72,12 +72,12 @@ function REPL:init(bufnr, opts)
     return false, "no command found for filetype: " .. ftobj
   end
 
-  local cmd, _opts = ftobj:get_command(bufnr, "repl", given_type)
+  local cmd, _opts, p = ftobj:get_command(bufnr, "repl", given_type)
   if not cmd then
     err_writeln("repl: no command found for filetype " .. dump(ft))
     return
   else
-    local check_name = ftobj.name .. "." .. given_type .. "." .. cmd[1]
+    local check_name = ftobj.name .. "." .. given_type .. "." .. p
     local already = user.repls[check_name]
     if already and already:is_running() then
       return already
@@ -88,11 +88,10 @@ function REPL:init(bufnr, opts)
     dict.merge(opts, _opts)
   end
 
-  self.cmd = cmd[2]
+  self.cmd = cmd
   self.filetype = ft
-  self.src = cmd[1]
-  cmd = cmd[2]
-  self.name = self.src
+  self.src = p
+  self.name = ftobj.name .. '.' .. given_type .. '.' .. self.src
   user.repls[self.name] = self
   self.type = given_type
 

@@ -2,12 +2,12 @@ require "nvim-utils.Autocmd"
 require "nvim-utils.Kbd"
 require "nvim-utils.logger"
 
-Plugin = class("Plugin", {static = {
+Plugin = class("Plugin", { static = {
   "setup_lazy",
   "list",
   "lazy_spec",
-  'main',
-}})
+  "main",
+} })
 
 function Plugin:init(name, opts)
   if user.plugins.exclude[name] then
@@ -83,15 +83,13 @@ function Plugin:configure()
     end
   end
 
-  xpcall(
-  function()
-    if self.name == 'colorscheme' or self.name == 'statusline' then
+  xpcall(function()
+    if self.name == "colorscheme" or self.name == "statusline" then
       setup()
     else
       vim.schedule(setup)
     end
-  end, 
-  function(msg)
+  end, function(msg)
     logger:warn(msg)
     logger:debug(dump(items(self)))
   end)

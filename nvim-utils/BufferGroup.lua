@@ -1,8 +1,7 @@
 require "nvim-utils.Kbd"
 
 if not BufferGroup then
-  BufferGroup =
-    class("BufferGroup", { "main", "from_dict", "list_groups_for_buffer", "list_groups" })
+  BufferGroup = class("BufferGroup", { "main", "from_dict", "list_groups_for_buffer", "list_groups" })
 end
 
 function BufferGroup:reinclude_buffer(bufnr)

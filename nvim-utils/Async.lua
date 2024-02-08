@@ -1,7 +1,7 @@
 local uv = vim.loop
 
 --- @class Async
-Async = class("Async", {static = {'format_buffer'}})
+Async = class("Async", { static = { "format_buffer" } })
 
 function Async:create_pipes()
   self.pipes = {

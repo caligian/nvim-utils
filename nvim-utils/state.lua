@@ -71,9 +71,9 @@ user.lazy_path = (vim.fn.stdpath "data" .. "/lazy/lazy.nvim")
 user.config_dir = dir
 user.data_dir = data_dir
 user.plugins_dir = plugins_dir
-user.log_path = log_path  
-user.lsp_servers_path = Path.join(dir, 'lsp_servers')
-user.bookmarks_path = Path.join(data_dir, 'bookmarks.lua')
+user.log_path = log_path
+user.lsp_servers_path = Path.join(dir, "lsp_servers")
+user.bookmarks_path = Path.join(data_dir, "bookmarks.lua")
 
 local _winapi = {}
 local _bufapi = {}

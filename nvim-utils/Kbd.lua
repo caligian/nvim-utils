@@ -1,13 +1,13 @@
 require "nvim-utils.Autocmd"
 
 --- @class kbd
-Kbd = class("Kbd", {static = {
+Kbd = class("Kbd", { static = {
   "main",
   "from_dict",
   "buffer",
   "map",
   "noremap",
-}})
+} })
 
 Kbd.buffer = ns()
 
