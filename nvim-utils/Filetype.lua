@@ -236,6 +236,7 @@ function Filetype:get_command(bufnr, cmd_type, cmd_for)
   assert(is_string(cmd_for))
 
   local spec = self[cmd_type]
+  spec = is_string(spec) and {buffer = spec} or spec
   if not is_table(spec) then
     error("invalid spec given " .. dump(cmd_type))
   end
