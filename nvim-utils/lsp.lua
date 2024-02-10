@@ -7,7 +7,7 @@ lsp.diagnostic = {
 }
 
 vim.lsp.handlers["textDocument/hover"] = vim.lsp.with(vim.lsp.handlers.hover, {
-  border = "single",
+--  border = "single",
   title = "hover",
 })
 
@@ -103,7 +103,7 @@ function lsp.on_attach(client, bufnr)
   end
 
   local ft = vim.bo.filetype
-  local has_formatter = Filetype(ft):loadfile()
+  local has_formatter = Filetype(ft):load_config()
 
   if has_formatter and not has_formatter.formatter then
     lsp.attach_formatter(client)

@@ -1,4 +1,5 @@
 #!/bin/bash
 
-rm -r $HOME/.config/nvim/lua/nvim-utils
+path=$HOME/.config/nvim/lua/nvim-utils
+[[ -d $path ]] && rm -r $path 
 cp -r nvim-utils/ $HOME/.config/nvim/lua

@@ -1,3 +1,7 @@
+if user then
+  return user
+end
+
 require "lua-utils"
 require "nvim-utils.Path"
 require "nvim-utils.logger"
