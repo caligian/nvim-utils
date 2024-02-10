@@ -2,4 +2,4 @@
 
 path=$HOME/.config/nvim/lua/nvim-utils
 [[ -d $path ]] && rm -r $path 
-cp -r nvim-utils/ $HOME/.config/nvim/lua
+cp -vr nvim-utils/ $HOME/.config/nvim/lua

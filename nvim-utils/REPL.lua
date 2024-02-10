@@ -107,9 +107,9 @@ function REPL:init(bufnr, opts)
   return Terminal.init(self, cmd, opts)
 end
 
-REPL.main = vim.schedule_wrap(function()
+REPL.main = function()
   REPL.set_mappings()
-end)
+end
 
 function REPL.set_mappings()
   local function start(tp)

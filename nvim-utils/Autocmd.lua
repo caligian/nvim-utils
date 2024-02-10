@@ -185,8 +185,8 @@ function Autocmd.load_configs()
   return Autocmd.from_dict(require_config "autocmds" or {})
 end
 
-Autocmd.main = vim.schedule_wrap(function()
+Autocmd.main = function()
   return Autocmd.load_configs()
-end)
+end
 
 return Autocmd

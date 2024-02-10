@@ -225,4 +225,4 @@ function Kbd.load_configs()
   return Kbd.from_dict(require_config "kbds" or {})
 end
 
-Kbd.main = vim.schedule_wrap(Kbd.load_configs)
+Kbd.main = Kbd.load_configs

@@ -23,7 +23,6 @@ Filetype = class("Filetype", {
 
 function Filetype._resolve(name)
   assert_is_a(name, union("Filetype", "string", "number"))
-
   if typeof(name) == "Filetype" then
     return name
   elseif is_number(name) then
