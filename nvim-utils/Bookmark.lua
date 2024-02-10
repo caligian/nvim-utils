@@ -54,7 +54,7 @@ function Bookmark.add(file_path, lines, desc)
   if not isfile and not isdir then
     error(file_path .. " is neither a binary file or a directory")
   elseif lines and isdir then
-    error(file_path .. " cannot use linesnum with a directory")
+    error(file_path .. " cannot use linenum with a directory")
   elseif lines then
     context = Bookmark.get_context(file_path, lines)
   end

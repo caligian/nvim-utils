@@ -1,4 +1,14 @@
 return {
+  add_dir_bookmark = {
+    "n",
+    "<leader>bM",
+    function()
+      Bookmark.add_and_save(Path.dirname(Buffer.get_name(Buffer.bufnr())))
+    end,
+    {
+      desc = "add dir bookmark",
+    },
+  },
   add_bookmark = {
     "n",
     "<leader>bm",
