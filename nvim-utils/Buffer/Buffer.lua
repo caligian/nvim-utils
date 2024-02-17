@@ -471,8 +471,8 @@ function Buffer.substr(bufnr, X, Y)
     return true
   end
 
-  X = assert_is_a[spec](X)
-  Y = assert_is_a[spec](Y)
+  assert_is_a[spec](X)
+  assert_is_a[spec](Y)
 
   if is_number(X) and is_table(Y) then
     X = { X, X }
@@ -480,6 +480,7 @@ function Buffer.substr(bufnr, X, Y)
   elseif is_number(Y) and is_table(X) then
     Y = { 0, Y }
   else
+    print(X, Y)
     return vim.api.nvim_buf_get_lines(bufnr, X, Y, false)
   end
 

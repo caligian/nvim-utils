@@ -629,4 +629,32 @@ return {
     ":LspStart<CR>",
     withopts "start lsp",
   },
+
+  --- some async functions
+  async_shell = {
+    'n',
+    '!',
+    function ()
+      local cmd = vim.fn.input("bash -c {cmd} % ")
+      if #cmd == 0 then
+        return
+      end
+
+      local job = Async(cmd, {split = true, shell = true, output = true})
+      if job then
+        job:start()
+      end
+
+      nvim.create.autocmd('ExitPre', {
+        callback = function ()
+          if job then
+            job:stop()
+          end
+        end
+      })
+    end,
+    {
+      desc = 'bash -c {cmd}',
+    }
+  }
 }

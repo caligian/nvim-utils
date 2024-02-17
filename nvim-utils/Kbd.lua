@@ -40,7 +40,7 @@ function Kbd:init(mode, ks, callback, rest)
   rest = is_string(_rest) and { desc = _rest } or _rest
   mode = is_string(mode) and strsplit(mode, "") or mode
   local command = is_string(callback) and callback
-  callback = is_callable(callback) and callback
+  callback = is_method(callback) and callback
   local prefix = rest.prefix
   local noremap = rest.noremap
   local event = rest.event

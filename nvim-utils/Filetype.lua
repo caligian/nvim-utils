@@ -2,6 +2,8 @@ require "nvim-utils.Autocmd"
 require "nvim-utils.Async"
 require "nvim-utils.Buffer.Buffer"
 require "nvim-utils.Kbd"
+require "nvim-utils.Template"
+
 local lsp = require "nvim-utils.lsp"
 
 Filetype = class("Filetype", {
@@ -46,7 +48,12 @@ function Filetype.query(ft, attrib, f)
   obj = dict.get(obj, totable(attrib))
 
   if not obj then
-    return false, string.format("%s: invalid attribute: %s", dump(ft), dump(attrib))
+    return false,
+      string.format(
+        "%s: invalid attribute: %s",
+        dump(ft),
+        dump(attrib)
+      )
   end
 
   if f then
@@ -56,7 +63,12 @@ function Filetype.query(ft, attrib, f)
   return obj
 end
 
-function Filetype._find_workspace(start_dir, pats, maxdepth, _depth)
+function Filetype._find_workspace(
+  start_dir,
+  pats,
+  maxdepth,
+  _depth
+)
   maxdepth = maxdepth or 5
   _depth = _depth or 0
   pats = totable(pats or "%.git/$")
@@ -80,29 +92,48 @@ function Filetype._find_workspace(start_dir, pats, maxdepth, _depth)
     end
   end
 
-  return Filetype._find_workspace(Path.dirname(start_dir), pats, maxdepth, _depth + 1)
+  return Filetype._find_workspace(
+    Path.dirname(start_dir),
+    pats,
+    maxdepth,
+    _depth + 1
+  )
 end
 
-function Filetype.get_workspace(bufnr, pats, maxdepth, _depth)
+function Filetype.get_workspace(
+  bufnr,
+  pats,
+  maxdepth,
+  _depth
+)
   if not Buffer.exists(bufnr) then
     return
   end
 
   local bufname = Buffer.get_name(bufnr)
-  local ws = Filetype._find_workspace(Path.dirname(bufname), pats, maxdepth, _depth)
+  local ws = Filetype._find_workspace(
+    Path.dirname(bufname),
+    pats,
+    maxdepth,
+    _depth
+  )
   if ws then
     return ws
   end
 
-  local server = Filetype.query(Buffer.filetype(bufnr), "server")
+  local server =
+    Filetype.query(Buffer.filetype(bufnr), "server")
   if not server then
     return
   end
 
   local lspconfig = require "lspconfig"
   server = totable(server)
-  local config = is_string(server) and lspconfig[server] or lspconfig[server[1]]
-  local root_dir_checker = server.get_root_dir or config.document_config.default_config.root_dir or config.get_root_dir
+  local config = is_string(server) and lspconfig[server]
+    or lspconfig[server[1]]
+  local root_dir_checker = server.get_root_dir
+    or config.document_config.default_config.root_dir
+    or config.get_root_dir
 
   if root_dir_checker then
     return root_dir_checker(bufname)
@@ -116,7 +147,10 @@ local function get_name(x)
 end
 
 function Filetype.list_configs()
-  return list.map(Path.ls(user.config_dir .. "/lua/core/ft"), get_name)
+  return list.map(
+    Path.ls(user.config_dir .. "/lua/core/ft"),
+    get_name
+  )
 end
 
 function Filetype.load_configs()
@@ -169,7 +203,8 @@ function match_command:match_path(spec, path)
       end
     elseif is_table(value) then
       for key_1, value_1 in pairs(value) do
-        local ok = (is_string(key_1) and path:match(key_1)) or (is_method(key_1) and key_1(path))
+        local ok = (is_string(key_1) and path:match(key_1))
+          or (is_method(key_1) and key_1(path))
 
         if ok then
           return process(value_1)
@@ -192,8 +227,17 @@ function match_command:match(bufnr, spec, cmd_for)
 
   local bufname = Buffer.get_name(bufnr)
   local path
-  if not (cmd_for == "workspace" or cmd_for == "buffer" or cmd_for == "dir") then
-    error("expected any of workspace, dir, buffer, got " .. dump(cmd_for))
+  if
+    not (
+      cmd_for == "workspace"
+      or cmd_for == "buffer"
+      or cmd_for == "dir"
+    )
+  then
+    error(
+      "expected any of workspace, dir, buffer, got "
+        .. dump(cmd_for)
+    )
   elseif cmd_for == "workspace" then
     path = Filetype.get_workspace(bufnr, spec.root_dir, 4)
     if not path then
@@ -210,7 +254,12 @@ function match_command:match(bufnr, spec, cmd_for)
     error("could not get any command for " .. path)
   end
   local opts = dict.filter(spec, function(key, _)
-    return not (key == "buffer" or key == "workspace" or key == "dir" or key == "root_dir")
+    return not (
+      key == "buffer"
+      or key == "workspace"
+      or key == "dir"
+      or key == "root_dir"
+    )
   end)
 
   return ok, opts, path
@@ -235,257 +284,18 @@ function Filetype:get_command(bufnr, cmd_type, cmd_for)
   assert(is_string(cmd_for))
 
   local spec = self[cmd_type]
-  spec = is_string(spec) and {buffer = spec} or spec
+  spec = is_string(spec) and { buffer = spec } or spec
   if not is_table(spec) then
     error("invalid spec given " .. dump(cmd_type))
   end
   local cmd_maker = match_command(spec)
-  assert(cmd_maker[cmd_for], "cmd_for should be workspace, dir or buffer")
+  assert(
+    cmd_maker[cmd_for],
+    "cmd_for should be workspace, dir or buffer"
+  )
 
   return cmd_maker[cmd_for](bufnr)
 end
-
---[[
---------------------------------------------------
---- @alias command string | function | ({[1]: any, [2]: function})[]
-
---- @class Command
---- @field buffer? command
---- @field workspace? command
---- @field dir? command
---- @field root_dir? string[] | string workspace_root_patterns
-
---- @class REPLCommand : Command
---- @field on_input? function
---- @field load_from_path? function
-
---- @class FormatCommand : Command
---- @field stdin? boolean
-
---- @param p string path
---- @param spec Command | command
---- @return {[1]: string, [2]: string}
-local function match_command(p, spec)
-  local lookup_dict = function(x)
-    local ok = is_table(x) and list.is_a(x, function(X)
-      return #X == 2 and is_callable(X[2])
-    end)
-
-    if not ok then
-      return false, ("expected {<test>, <callable>}, got " .. dump(x))
-    end
-
-    return true
-  end
-
-  local switch = case {
-    {
-      lookup_dict,
-      function(obj)
-        for i = 1, #obj do
-          local test, fun = unpack(obj[i])
-          local ok
-
-          if is_string(test) then
-            if p:match(test) then
-              ok = true
-            end
-          elseif test(p) then
-            ok = true
-          end
-
-          if ok then
-            return { p, fun(p) }
-          end
-        end
-      end,
-    },
-    {
-      is_function,
-      function(f)
-        return { p, f(p) }
-      end,
-    },
-    {
-      is_string,
-      function(s)
-        return { p, s }
-      end,
-    },
-  }
-
-  local ok = switch:match(spec)
-  if not ok then
-    error("invalid command spec " .. dump(spec))
-  end
-
-  return ok
-end
-
-local function is_command(spec)
-  if is_string(spec) then
-    return true
-  end
-
-  local ok = dict.has_some_keys(spec, { "buffer", "workspace", "dir" })
-  if not ok then
-    return false, "expected dict to have any of .buffer, .workspace, .dir, got " .. dump(spec)
-  end
-
-  return true
-end
-
---- @class get_command_return
---- @field workspace? {[1]: string, [2]: string}
---- @field buffer? {[1]: string, [2]: string}
---- @field dir? {[1]: string, [2]: string}
-
---- @param bufnr number
---- @param spec Command | command
---- @return get_command_return?, string?
-local function get_command(bufnr, spec)
-  if not is_command(spec) then
-    local msg = 'expected string | {{test, callback}, ...}, got ' .. dump(x)
-    return nil, msg
-  elseif is_string(spec) then
-    spec = { buffer = spec }
-  end
-
-  local res = {}
-  if spec.workspace then
-    local ws_pat = spec.root_dir
-    local ws = Filetype.get_workspace(bufnr, ws_pat, 4)
-
-    if ws then
-      res.workspace = match_command(ws, spec.workspace)
-    end
-  end
-
-  if spec.dir then
-    local dirname = Path.dirname(Buffer.get_name(bufnr))
-
-    ---@diagnostic disable-next-line: param-type-mismatch
-    res.dir = match_command(dirname, spec.dir)
-  end
-
-  if spec.buffer then
-    res.buffer = match_command(Buffer.get_name(bufnr), spec.buffer)
-  end
-
-  list.each(keys(res), function(k)
-    local v = res[k]
-    local p, cmd = unpack(v)
-    local templ = template(cmd, { path = p })
-    res[k] = { p, templ }
-  end)
-
-  return res
-end
-
---- @param cmd_type "repl" | "compile" | "build" | "test" | "format"
---- @param cmd command | Command
-local function validate(cmd_type, cmd)
-  if not strmatch(cmd_type, "repl", "compile", "build", "test", "format") then
-    error(dump { "repl", "compile", "build", "test", "format" })
-  elseif is_string(cmd) then
-    return { buffer = cmd }
-  end
-
-  local sig = union("string", "function", "table")
-
-  local common = {
-    ["buffer?"] = sig,
-    ["workspace?"] = sig,
-    ["dir?"] = sig,
-  }
-
-  local validators = {
-    repl = {
-      ["on_input?"] = "function",
-      ["load_from_path?"] = "function",
-    },
-    formatter = {
-      ["stdin?"] = "boolean",
-    },
-  }
-
-  form[common].command(cmd)
-
-  local test = validators[cmd_type]
-  if test then
-    form[test].command(test)
-  end
-
-  assert(is_command(cmd))
-
-  return cmd
-end
-
---- @param bufnr number
---- @param cmd_type "repl" | "compile" | "build" | "test" | "format"
---- @param spec command | Command
---- @param cmd_for string "buffer" | "workspace" | "dir"
---- @return (string|get_command_return)?
-function Filetype._get_command(bufnr, cmd_type, spec, cmd_for)
-  if not spec then
-    return
-  end
-
-  validate(cmd_type, spec)
-
-  spec = is_string(spec) and { buffer = spec } or spec
-
-  if cmd_for then
-    assert(spec[cmd_for], cmd_for .. ": command does not exist for " .. cmd_type)
-
-    spec = { [cmd_for] = spec[cmd_for] }
-    local ok = get_command(bufnr, spec)
-
-    if ok then
-      return ok[cmd_for]
-    end
-  end
-
-  return get_command(bufnr, spec)
-end
-
---- @param spec command | Command
---- @return table?
-function Filetype._get_opts(spec)
-  if not spec then
-    return
-  end
-
-  spec = is_string(spec) and { buffer = spec } or spec
-
-  return dict.filter_unless(spec, function(key, _)
-    return strmatch(key, "^buffer$", "^workspace$", "^dir$")
-  end)
-end
-
---- @param bufnr number
---- @param cmd_type "repl" | "compile" | "build" | "test" | "format"
---- @param spec command | Command
---- @param cmd_for string "buffer" | "workspace" | "dir"
---- @return (string|get_command_return)?, table?
-function Filetype._get_command_and_opts(bufnr, cmd_type, spec, cmd_for)
-  if not spec then
-    return
-  end
-
-  local cmd = Filetype._get_command(bufnr, cmd_type, spec, cmd_for)
-
-  if not cmd then
-    return
-  end
-
-  local opts = Filetype._get_opts(spec) or {}
-  return cmd, opts
-end
---]]
-
---------------------------------------------------
---- @class Filetype
 
 function Filetype:init(name)
   local already = Filetype._resolve(name)
@@ -496,7 +306,8 @@ function Filetype:init(name)
   local luafile = name .. ".lua"
 
   self.name = name
-  self.config_path = Path.join(user.config_dir, "lua", "core", "ft", luafile)
+  self.config_path =
+    Path.join(user.config_dir, "lua", "core", "ft", luafile)
   self.config_require_path = "core.ft." .. name
   self.enabled = {
     mappings = {},
@@ -507,7 +318,8 @@ function Filetype:init(name)
   self.mappings = false
   self.autocmds = false
   self.buf_opts = false
-  self.augroup = "UserFiletype" .. name:gsub("^[a-z]", string.upper)
+  self.augroup = "UserFiletype"
+    .. name:gsub("^[a-z]", string.upper)
 
   nvim.create.autocmd("FileType", {
     pattern = name,
@@ -631,12 +443,20 @@ function Filetype:format_buffer_workspace(bufnr)
 end
 
 function Filetype:format_buffer(bufnr, cmd_for)
-  local cmd, opts = self:get_command(bufnr, "formatter", cmd_for or "buffer")
+  local cmd, opts = self:get_command(
+    bufnr,
+    "formatter",
+    cmd_for or "buffer"
+  )
   if not cmd then
     return
   end
   local bufname = Buffer.get_name(bufnr)
-  local name = self.name .. ".formatter." .. cmd_for .. "." .. bufname
+  local name = self.name
+    .. ".formatter."
+    .. cmd_for
+    .. "."
+    .. bufname
   self.jobs[name] = Async.format_buffer(bufnr, cmd, opts)
   self.jobs[name]:start()
 
@@ -653,7 +473,8 @@ end
 
 function Filetype:compile_buffer(bufnr, action, cmd_for)
   cmd_for = cmd_for or "workspace"
-  local cmd, opts, p = self:get_command(bufnr, action, cmd_for)
+  local cmd, opts, p =
+    self:get_command(bufnr, action, cmd_for)
   if not cmd then
     return
   end
@@ -717,19 +538,36 @@ function Filetype:setup()
     self:set_commands()
     self:set_autocmds()
     self:set_mappings()
+    self:set_templates()
   end, function(msg)
     logger:warn(msg .. "\n" .. dump(self:get_attribs()))
   end)
 end
 
-Filetype.setup_lsp_all = function()
+function Filetype.setup_lsp_all()
   list.each(Filetype.list_configs(), function(ft)
     Filetype(ft):load_config():setup_lsp()
   end)
 end
 
-Filetype.main = function()
+function Filetype.main()
   list.each(Filetype.list_configs(), function(ft)
     Filetype(ft):setup()
   end)
+end
+
+function Filetype:set_templates()
+  if
+    not self.templates
+    or (size(self.templates) == 0)
+    or self.template
+  then
+    return
+  end
+
+  self.template = Template(self.name, "Filetype")
+  self.template:add_template(self.templates)
+  self.template:enable()
+
+  return self.template
 end

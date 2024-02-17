@@ -139,14 +139,22 @@ function Async:start(cmd)
         list.shift(stderr)
       end
 
-      if #stdout > 0 then
-        list.append(lines, "-- STDOUT --")
-        list.extend(lines, stdout)
+      local stdout_l = #stdout
+      local stderr_l = #stderr
+
+      local function write_lines(to, src)
+        list.append(lines, ("-- %s --"):format(to:upper()))
+        list.extend(lines, src)
       end
 
-      if #stderr > 0 then
-        list.append(lines, "-- STDERR --")
-        list.extend(lines, stderr)
+      if stdout_l > 0 and stderr_l > 0 then
+        write_lines('stdout', stdout)
+        list.append(lines, "")
+        write_lines('stderr', stderr)
+      elseif stdout_l > 0 then
+        write_lines('stdout', stdout)
+      elseif stderr_l > 0 then
+        write_lines('stderr', stderr)
       end
 
       Buffer.set(buf, { 0, -1 }, lines)
