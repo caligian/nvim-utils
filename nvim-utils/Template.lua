@@ -1,127 +1,139 @@
-require "nvim-utils.state"
-require 'nvim-utils.Autocmd'
-
---- Create a template instance for file patterns
---- @class Template
---- @overload fun(pat: string|string[], event?: string|string[]): Template
-Template = class("Template", {
-  static = {
-    from_dict = true,
-    load_dirs = true,
-  },
+Template = class('Template', {
+  static = { 'load_config', 'from_dict', }
 })
 
-Template.base_dirs =
-  { Path.join(user.config_dir, "templates") }
+user.templates = user.templates or {}
+user.templates_path = user.templates_path or Path.join(user.config_dir, 'lua', 'core', 'templates') 
 
-user.templates = user.templates or {} 
+function Template:init(opts)
+  local spec = union('string', 'method', 'table')
+  form[{
+    opt_filetype = 'string',
+    opt_ft = 'string',
+    opt_event = spec,
+    opt_exclude = spec,
+    opt_include = spec,
+    pattern = spec,
+    put = union('string', case.rules.list_of 'string'),
+  }].template(opts)
 
-function Template.load_dirs() end
+  local ft = opts.ft or opts.filetype
+  local event = tolist(event or 'BufEnter')
+  local pattern = tolist(opts.pattern)
+  local exclude = tolist(opts.exclude or {})
+  local put = tolist(opts.put)
+  local include = tolist(opts.include or {})
 
-function Template.from_dict(specs) end
-
-function Template:set_in_buf(buf)
-  throw.missing_templates(#(self.templates) ~= 0)
-
-  local templs = self.templates
-  local templs_len = #templs
-  local buflc = Buffer.linecount(buf)
-
-  if buflc == 0 then
-    Buffer.set(buf, {0, 0}, templs)
-    return true
+  if not list.contains(event, 'Filetype') and ft then
+    event[#event+1] = 'Filetype'
+    pattern[#pattern+1] = ft
   end
 
-  local lines =  Buffer.lines(buf)
-  lines = list.sub(lines, 1, templs_len)
-
-  if case.eq(lines, templs) then
-    return
+  if #put[#put] ~= 0 then
+    put[#put+1] = ""
   end
 
-  Buffer.set(buf, {0, 0}, templs)
-  return true
+  self.pattern = pattern
+  self.event = event
+  self.exclude = exclude
+  self.attached = {}
+  self.put = put
+  self.include = include
+  self.filetype = ft
+  self.autocmd = false
+
+  return self
 end
 
-function Template:is_enabled()
-  if self.autocmd and self.autocmd:exists() then
-    return
-  end
-end
-
-function Template:enable()
-  if self:is_enabled() then
-    return
+function Template:_add_buffer(buf)
+  if not Buffer.exists(buf) or self.attached[buf] then
+    return false
   end
 
-  local pat = self.pattern
-  local event = self.event
-  local name = 'template.' .. pat
-  local function add_buf(buf)
-    if self:set_in_buf(buf) then
-      self.buffers[buf] = true
+  local include =  self.include
+  local exclude = self.exclude
+  local bufnr = buf
+  buf = Buffer.get_name(buf)
+
+  for i = 1, #exclude do
+    local p = exclude[i]
+    local test = is_method(p) and p(buf) or is_string(p) and buf:match(p)
+    if test then
+      return false
     end
   end
 
-  if not event then
-    event = 'BufAdd'
-    self.autocmd = Autocmd(event, {pattern = '*', callback = function (bufopts)
-      if self.buffers[bufopts.buf] then
-        return
-      end
-      local bufname = nvim.buf.get_name(bufopts.buf)
-      if bufname:match(self.pattern)  then
-        add_buf(bufopts.buf)
-      end
-    end, name = name})
-  else
-    self.autocmd = Autocmd(event, {
-      pattern = pat,
-      callback = function (bufopts)
-        add_buf(bufopts.buf)
-      end,
-      name = name,
-    })
+  for i=1, #include do
+    local p = include[i]
+    local test = is_method(p) and p(buf) or is_string(p) and buf:match(p)
+    if test then
+      self.attached[bufnr] = true
+      self.attached[buf] = true
+      return true
+    end
   end
-
-  user.templates[pat] = self
-  return self
 end
 
---- @param pat string autocmd pattern, by default use lua pattern[s] with BufAdd
---- @param event? string if nil then use BufAdd with lua pattern matching else use pattern with event
---- @return Template
-function Template:init(pat, event, opts)
-  form.string.pattern(pat)
-
-  if user.templates[self.pat] then
-    return 
+function Template:_set(buf)
+  if self.attached[buf] or not Buffer.exists(buf) then
+    return
   end
 
-  if event then
-    form.string.event(event)
+  local put = self.put
+  local putlc = #put
+  local buflc = Buffer.linecount(buf)
+
+  if buflc == 0 then
+    Buffer.set(buf, {0, -1}, put)
   end
 
-  self.templates = {}
-  self.pattern = pat
-  self.event = event
-  self.buffers = {} 
+  local lines = Buffer.lines(buf, 0, putlc)
+  if case.eq(lines, put) then
+    return
+  end
+
+  Buffer.set(buf, {0, 0}, put)
+  self:_add_buffer(buf)
 
   return self
 end
 
-function Template:add(s)
-  form[union('string', case.rules.list_of 'string')].s(s)
-  if is_string(s) then
-    list.append(self.templates, s)
-  else
-    list.extend(self.templates, s)
+function Template:enable()
+  if self.autocmd and self.autocmd:exists() then
+    return
   end
+
+  self.autocmd = Autocmd(self.event, {
+    pattern = self.pattern,
+    callback = function (bufopts)
+      if self.attached[bufopts.buf] then return end
+      self:_set(bufopts.buf)
+    end,
+  })
+
+  return self
 end
 
-function Template:from_dict()
+function Template.from_dict(specs)
+  return dict.map(specs, function (name, specs)
+    local t = Template(specs)
+    user.templates[name] = t:enable()
+    return t
+  end)
 end
 
-ex = Template( 'c', 'Filetype')
-ex:add "#include <stdio.h>"
-ex:enable()
+function Template.load_config(p)
+  p = p or user.templates_path
+  if not Path.is_dir(p) then
+    return
+  end
+
+  list.each(Path.ls(p), function (f)
+    f = Path.basename(f):gsub('%.lua$', '')
+    requirex('core.templates.' .. f, function (templ)
+      return Template.from_dict(templ)
+    end)
+  end)
+end
+
+Template.load_config()
