@@ -21,10 +21,12 @@ user_config.telescope = {
   layout_config = {height = 13}
 }
 
-require 'lua-utils.utils'
-for key, value in pairs(require('lua-utils')) do
-  user_config[key] = value
+local lua_utils = require 'lua-utils'
+for k, v in pairs(lua_utils) do
+  user_config[k] = v
 end
+
+lua_utils:import()
 
 local augroup = require('nvim-utils.augroup')
 local window = require('nvim-utils.window')
@@ -38,8 +40,22 @@ local buffer_group = require('nvim-utils.buffer_group')
 local picker = require('nvim-utils.picker')
 local autocmd = require 'nvim-utils.autocmd'
 local keymap = require 'nvim-utils.keymap'
+local path = require 'lua-utils.path_utils'
+
+---Get dirname of buffer/path
+---@param buf number|string? (default: 0)
+function dirname(buf)
+  buf = buf or buffer.current()
+  if types.number(buf) then
+    buf = buffer.name(buf)
+    return path.dirname(buf)
+  elseif types.string(buf) then
+    return path.dirname(buf)
+  end
+end
 
 --- Nvim lib
+user_config.path = path
 user_config.keymap = keymap
 user_config.buffer_group = buffer_group
 user_config.terminal = terminal

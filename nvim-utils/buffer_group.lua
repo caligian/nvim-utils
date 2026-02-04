@@ -19,7 +19,7 @@ function buffer_group:initialize(name, pattern, event)
   self.event = event or 'BufRead'
   self.name = name
   self.group = augroup('buffer_group.' .. name)
-  self.pattern = pattern or '*'
+  self.pattern = pattern or '*.*'
   self.buffers = {}
   self.removed = {}
   self.cache = {buffers = {}, removed = {}}
@@ -408,7 +408,7 @@ end
 function buffer_group.setup()
   buffer_group.load_config()
   vim.api.nvim_create_autocmd('BufRead', {
-    pattern = '*',
+    pattern = '*.*',
     callback = function(args)
       for _, group in pairs(user_config.buffer_groups) do
         group:add(args.buf)

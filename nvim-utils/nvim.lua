@@ -1,5 +1,6 @@
 local utils = require('lua-utils')
 local list = utils.list
+local types = utils.types
 local validate = utils.validate
 local nvim = {}
 
@@ -153,5 +154,7 @@ end
 function nvim.select(choices, prompt, on_choice, formatter)
   vim.ui.select(choices, {prompt = prompt, format_item = formatter}, on_choice)
 end
+
+
 
 return nvim
