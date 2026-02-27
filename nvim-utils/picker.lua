@@ -4,7 +4,7 @@ local validate = utils.validate
 local class = utils.class
 local dict = utils.dict
 local V = validate
-local picker = class 'picker'
+local picker = class 'Picker'
 user_config.picker = picker
 
 function picker:initialize(title)

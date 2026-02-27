@@ -31,7 +31,7 @@ function keymap.opts(opts)
     au_opts[2] = {pattern = ft}
 
     if name then
-      au_opts[4].desc = sprintf('filetype.%s.%s', ft, name)
+      au_opts[2].desc = sprintf('filetype.%s.%s', ft, name)
     end
   end
 

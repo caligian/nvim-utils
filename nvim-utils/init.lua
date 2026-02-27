@@ -148,7 +148,7 @@ end
 function user_config:root_dir(bufnr)
   local bufname = buffer.name(bufnr)
   local ft = buffer.filetype(bufnr)
-  local opts = user_config.dict.get(self.filetypes, {ft, 'root'}) or {}
+  local opts = ft and ft.root or {}
 
   if not bufname:match('[a-zA-Z0-9]') then
     return false
@@ -157,8 +157,9 @@ function user_config:root_dir(bufnr)
   end
 
   return buffer.workspace(bufnr, {
-    pattern = user_config.dict.get(opts, {'root', 'pattern'}) or {'.git'},
-    check_depth = user_config.dict.get(opts, {'root', 'check_depth'}) or 4,
+    pattern = opts.pattern,
+    check_depth = opts.depth or opts.check_depth,
+    callback = opts.callback,
   })
 end
 

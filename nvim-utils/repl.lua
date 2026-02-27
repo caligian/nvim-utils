@@ -5,7 +5,7 @@ local dict = utils.dict
 local validate = utils.validate
 local buffer = require 'nvim-utils.buffer'
 local terminal = require('nvim-utils.terminal')
-local repl = class('repl', terminal)
+local repl = class('Repl', terminal)
 
 -- opts = {
 --   command = types.string,

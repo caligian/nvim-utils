@@ -68,7 +68,7 @@ end
 
 function buffer.get_line(bufnr, linenum)
   local ok, msg = pcall(
-    vim.api.nvim_buffer.get_lines,
+    vim.api.nvim_buffer_get_lines,
     bufnr, linenum, linenum+1, true
   )
   if ok then
@@ -217,6 +217,19 @@ end
 
 function buffer.split_right(bufnr, resize)
   return buffer.split(bufnr, 'right', resize)
+end
+
+function buffer.find_next(bufnr, pattern, start_line)
+  bufnr = bufnr or buffer.current()
+  start_line = start_line or buffer.get_linenum(bufnr)
+  local buffer_lc = buffer.line_count(bufnr)
+
+  for i=start_line, buffer_lc do
+    local line = buffer.get_line(bufnr, i)
+    if line and line:match(pattern) then
+      return i
+    end
+  end
 end
 
 function buffer.create_temp(name, opts)

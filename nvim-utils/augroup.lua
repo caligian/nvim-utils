@@ -6,7 +6,7 @@ local autocmd = require 'nvim-utils.autocmd'
 
 --- Create autocommand group
 --- @class augroup
-local augroup = class 'augroup'
+local augroup = class 'Augroup'
 
 --- Augroups
 function augroup:initialize(name)

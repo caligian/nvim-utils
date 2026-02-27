@@ -4,8 +4,8 @@ local dict = utils.dict
 local list = utils.list
 local validate = utils.validate
 local class = utils.class
-local augroup = require('nvim-utils.augroup')
-local buffer = require('nvim-utils.buffer')
+local augroup = require 'nvim-utils.augroup'
+local buffer = require 'nvim-utils.buffer'
 local buffer_group = require 'nvim-utils.buffer_group'
 local keymap = require 'nvim-utils.keymap'
 
@@ -33,23 +33,23 @@ local keymap = require 'nvim-utils.keymap'
 --   }
 -- }
 
-local filetype = class 'filetype'
+local filetype = class 'Filetype'
 
 local function update_lsp_config(opts)
   local root_merged = false
   local merge_root_config = function(config)
     if config.root_markers then
-      dict.set(opts, {'root', 'pattern'}, config.root_markers, true)
+      dict.set(opts, { 'root', 'pattern' }, config.root_markers, true)
     end
   end
   local merge_config = function(name, lsp_opts)
     local ok, config = pcall(require, 'nvim-lspconfig.lsp.' .. name)
-    if ok then 
+    if ok then
       if not root_merged then
         merge_root_config(config)
         root_merged = true
       end
-      dict.merge(lsp_opts, config) 
+      dict.merge(lsp_opts, config)
     end
   end
   local spec = opts.lsp
@@ -113,11 +113,11 @@ function filetype:initialize(opts)
   self.augroup = augroup('user_config.filetype.' .. self.name)
   self.loaded = false
 
-  dict.set_unless(self, {'root', 'pattern'}, {'.git'}, true)
-  dict.set_unless(self, {'root', 'check_depth'}, 4)
+  dict.set_unless(self, { 'root', 'pattern' }, { '.git' }, true)
+  dict.set_unless(self, { 'root', 'check_depth' }, 4)
   self:setup()
 
-  dict.set_unless(self, {'root', 'buffer_groups'}, {})
+  dict.set_unless(self, { 'root', 'buffer_groups' }, {})
   user_config.filetypes[self.name] = self
 end
 
@@ -130,14 +130,14 @@ function filetype:get_lsp_config()
   config = vim.deepcopy(config)
   if type(config[1]) == 'string' then
     local server = table.remove(config, 1)
-    return {{server, config}}
+    return { { server, config } }
   else
     local out = {}
     for _, spec in ipairs(self.lsp) do
       local server = spec[1]
       table.remove(spec, 1)
       local server_config = spec
-      out[#out+1] = {server, server_config}
+      out[#out + 1] = { server, server_config }
     end
 
     return out
@@ -158,7 +158,7 @@ function filetype:set_autocmds()
   end
 
   for name, callback in pairs(self.autocmds) do
-    local opts = {name = name, desc = name}
+    local opts = { name = name, desc = name }
     self.augroup:add_autocmd('FileType', self.name, callback, opts)
   end
 
@@ -180,7 +180,7 @@ function filetype:set_buf_vars()
         buffer.set_var(curbuf, key, value)
       end
     end
-  end, {name = 'buffer.variables'})
+  end, { name = 'buffer.variables' })
 end
 
 function filetype:set_buf_opts()
@@ -191,7 +191,7 @@ function filetype:set_buf_opts()
         buffer.set_opt(curbuf, key, value)
       end
     end
-  end, {name = 'buffer.options'})
+  end, { name = 'buffer.options' })
 end
 
 function filetype:add_autocmd(callback, opts)
@@ -205,20 +205,17 @@ function filetype:add_autocmd(callback, opts)
 end
 
 function filetype:add_keymap(mode, lhs, rhs, opts)
-  opts = vim.deepcopy(opts or {})
-  validate.opts(opts, 'table')
-
-  opts.filetype = self.name
-  opts.group = self.augroup.name
-
   return keymap.set(mode, lhs, rhs, opts)
 end
 
 function filetype:add_keymaps(specs)
   for name, spec in pairs(specs) do
     local mode, lhs, rhs, opts = unpack(spec)
+    opts = opts or {}
     opts = vim.deepcopy(opts)
+    opts.desc = opts.desc or name
     opts.name = name
+    opts.filetype = self.name
     self:add_keymap(mode, lhs, rhs, opts)
   end
 end
@@ -230,14 +227,14 @@ end
 filetype.del_autocmd = filetype.delete_autocmd
 
 function filetype:query(...)
-  return dict.get(self, {...})
+  return dict.get(self, { ... })
 end
 
 function filetype:root_dir(bufnr)
   local bufname = buffer.name(bufnr)
   local ft = buffer.filetype(bufnr)
   local root_opts = self.root or {
-    pattern = {'.git'},
+    pattern = { '.git' },
     check_depth = 4
   }
 
@@ -249,6 +246,7 @@ function filetype:root_dir(bufnr)
 
   local bgs = self.root.buffer_groups
   local ws = buffer.workspace(bufnr, root_opts)
+
   if not bgs[ws] then
     bgs[ws] = buffer_group(ws, ws)
   end
@@ -267,8 +265,8 @@ end
 if not user_config.filetypes.shell then
   user_config.filetypes.shell = filetype {
     name = 'shell',
-    root = {pattern = {'.git'}, check_depth = 4},
-    repl = {command = user_config.shell_command or 'bash'}
+    root = { pattern = { '.git' }, check_depth = 4 },
+    repl = { command = user_config.shell_command or 'bash' }
   }
 end
 

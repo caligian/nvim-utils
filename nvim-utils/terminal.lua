@@ -3,7 +3,7 @@ local types = require('lua-utils.types')
 local class = require('lua-utils.class')
 local nvim = require('nvim-utils.nvim')
 local validate = require 'lua-utils.validate'
-local terminal = class 'terminal'
+local terminal = class 'Terminal'
 
 function terminal:initialize(cmd, cwd)
   cwd = not cwd and vim.fn.getcwd() or cwd

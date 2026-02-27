@@ -12,7 +12,7 @@ local picker = require('nvim-utils.picker')
 
 --- Buffer groups
 --- Somewhat like project management buffers
-local buffer_group = class 'buffer_group'
+local buffer_group = class 'BufferGroup'
 user_config.buffer_group = buffer_group
 
 function buffer_group:initialize(name, pattern, event)

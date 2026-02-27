@@ -6,7 +6,7 @@ local types = utils.types
 local class = utils.class
 
 --- @class autocmd
-local autocmd = class 'autocmd'
+local autocmd = class 'Autocmd'
 
 --- @param group integer
 --- @param name string
