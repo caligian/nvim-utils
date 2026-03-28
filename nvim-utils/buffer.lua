@@ -34,7 +34,7 @@ buffer.length = buffer.line_count
 
 function buffer.delete(bufnr, force)
   force = ifnil(force, true, false)
-  vim.api.nvim_buf_delete(bufnr, {force = true})
+  vim.api.nvim_buf_delete(bufnr, { force = true })
 end
 
 buffer.del = buffer.delete
@@ -48,11 +48,11 @@ function buffer.loaded(bufnr)
 end
 
 function buffer.get_opt(bufnr, name)
-  return vim.api.nvim_get_option_value(name, {buf = bufnr})
+  return vim.api.nvim_get_option_value(name, { buf = bufnr })
 end
 
 function buffer.set_opt(bufnr, name, value)
-  return vim.api.nvim_set_option_value(name, value, {buf = bufnr})
+  return vim.api.nvim_set_option_value(name, value, { buf = bufnr })
 end
 
 function buffer.get(name, create)
@@ -67,9 +67,10 @@ function buffer.wordcount(bufnr)
 end
 
 function buffer.get_line(bufnr, linenum)
+  bufnr = bufnr or buffer.current()
   local ok, msg = pcall(
-    vim.api.nvim_buffer_get_lines,
-    bufnr, linenum, linenum+1, true
+    vim.api.nvim_buf_get_lines,
+    bufnr, linenum, linenum + 1, true
   )
   if ok then
     if list.length(msg) > 0 then
@@ -79,13 +80,13 @@ function buffer.get_line(bufnr, linenum)
 end
 
 function buffer.get_linenum(bufnr)
-  return buffer.call(bufnr, function ()
+  return buffer.call(bufnr, function()
     return vim.fn.getpos(".")[2] - 1
   end)
 end
 
 function buffer.current_line(bufnr)
-  return buffer.call(bufnr, function ()
+  return buffer.call(bufnr, function()
     return vim.fn.getline('.')
   end)
 end
@@ -115,14 +116,14 @@ end
 function buffer.append_lines(bufnr, lines, linenum)
   if type(lines) == 'string' then lines = vim.split(lines, "\n") end
   if not linenum then linenum = buffer.line_count(bufnr) else linenum = linenum + 1 end
-  vim.api.nvim_buffer.set_lines(bufnr, linenum, linenum, false, lines)
+  vim.api.nvim_buf_set_lines(bufnr, linenum, linenum, false, lines)
   return true
 end
 
 function buffer.prepend_lines(bufnr, lines, linenum)
   if type(lines) == 'string' then lines = vim.split(lines, "\n") end
   if not linenum then linenum = buffer.line_count(bufnr) - 1 end
-  vim.api.nvim_buffer.set_lines(bufnr, linenum, linenum, false, lines)
+  vim.api.nvim_buf_set_lines(bufnr, linenum, linenum, false, lines)
   return true
 end
 
@@ -139,9 +140,9 @@ function buffer.as_list(bufnr)
 end
 
 function buffer.grep(bufnr, ...)
-  local patterns = {...}
+  local patterns = { ... }
   local matches = function(s)
-    for i=1, #patterns do
+    for i = 1, #patterns do
       if s:match(patterns[i]) then
         return true
       end
@@ -158,12 +159,12 @@ function buffer.write(bufnr)
 end
 
 function buffer.wipeout(bufnr)
-  buffer.call(bufnr, function () vim.cmd('bwipeout! %') end)
+  buffer.call(bufnr, function() vim.cmd('bwipeout! %') end)
   return true
 end
 
 function buffer.visible(bufnr)
-   return buffer.winid(bufnr) ~= -1
+  return buffer.winid(bufnr) ~= -1
 end
 
 function buffer.hide(bufnr, force)
@@ -188,7 +189,7 @@ function buffer.split_current(direction, resize)
 end
 
 function buffer.split(bufnr, direction, resize)
-  buffer.call(bufnr, function ()
+  buffer.call(bufnr, function()
     if direction == 'right' or direction == 'vsplit' or direction == 'v' then
       vim.cmd 'vsplit | wincmd l'
       if resize then
@@ -224,7 +225,7 @@ function buffer.find_next(bufnr, pattern, start_line)
   start_line = start_line or buffer.get_linenum(bufnr)
   local buffer_lc = buffer.line_count(bufnr)
 
-  for i=start_line, buffer_lc do
+  for i = start_line, buffer_lc do
     local line = buffer.get_line(bufnr, i)
     if line and line:match(pattern) then
       return i
@@ -248,7 +249,7 @@ function buffer.create_temp(name, opts)
     vim.split(contents, "\n"),
     contents
   )
-  contents = contents and comment and list.map(contents, function (x)
+  contents = contents and comment and list.map(contents, function(x)
     return '# ' .. x
   end) or contents
 
@@ -260,18 +261,18 @@ function buffer.create_temp(name, opts)
   end
 
   if split then
-    vim.keymap.set('n', 'q', '<cmd>bwipeout! %<CR>', {buffer = bufnr})
+    vim.keymap.set('n', 'q', '<cmd>bwipeout! %<CR>', { buffer = bufnr })
     buffer.split(buffer.current(), split, resize)
     buffer.set_current(bufnr)
-    buffer.call(bufnr, function () vim.cmd 'normal! G' end)
+    buffer.call(bufnr, function() vim.cmd 'normal! G' end)
   end
 
   if on_input then
     vim.keymap.set(
       'n', '<C-c><C-c>',
-      function ()
+      function()
         local lines = buffer.lines(bufnr)
-        lines = list.filter(lines, function (x)
+        lines = list.filter(lines, function(x)
           if not x:match('^%s*#') then return x end
         end)
 
@@ -283,7 +284,7 @@ function buffer.create_temp(name, opts)
 
         vim.cmd('bwipeout! %')
       end,
-      {buffer = bufnr}
+      { buffer = bufnr }
     )
   end
 
@@ -291,7 +292,7 @@ function buffer.create_temp(name, opts)
     buffer.write(bufnr)
     if delete_after then
       local timer = vim.uv.new_timer()
-      timer:start(delete_after, 0, vim.schedule_wrap(function ()
+      timer:start(delete_after, 0, vim.schedule_wrap(function()
         pcall(vim.fs.rm, name)
         buffer.wipeout(bufnr)
         timer:stop()
@@ -308,7 +309,7 @@ function buffer.open_term(cmd, cwd)
   local job_id, termbufnr
   local chansend = vim.api.nvim_chan_send
 
-  buffer.call(temp_bufnr, function ()
+  buffer.call(temp_bufnr, function()
     vim.cmd('term')
     termbufnr = buffer.current()
     job_id = vim.b.terminal_job_id
@@ -330,11 +331,11 @@ function buffer.open_term(cmd, cwd)
     vim.api.nvim_create_autocmd('TermClose', {
       buffer = termbufnr,
       desc = 'Delete terminal buffer',
-      callback = function (args) buffer.del(args.buf) end
+      callback = function(args) buffer.del(args.buf) end
     })
 
     vim.keymap.set(
-      'n', 'q', ':hide<CR>', {buffer = termbufnr}
+      'n', 'q', ':hide<CR>', { buffer = termbufnr }
     )
 
     buffer.set_opt(termbufnr, 'buflisted', false)
@@ -356,8 +357,8 @@ end
 function buffer.root_dir(bufnr, pat, depth)
   bufnr = bufnr or vim.fn.bufnr()
   local bufname = buffer.name(bufnr)
-  local ws = vim.fs.find(pat, {upward = true, limit = depth or 4})
-  pat = pat or {'.git'}
+  local ws = vim.fs.find(pat, { upward = true, limit = depth or 4 })
+  pat = pat or { '.git' }
   depth = depth or 4
 
   if #ws == 0 then
@@ -366,8 +367,8 @@ function buffer.root_dir(bufnr, pat, depth)
     ws = vim.fs.dirname(ws[1])
     user_config.workspaces[bufnr] = ws
     user_config.workspaces[bufname] = ws
-    dict.set(user_config.workspaces, {ws, bufnr}, true)
-    dict.set(user_config.workspaces, {ws, bufname}, true)
+    dict.set(user_config.workspaces, { ws, bufnr }, true)
+    dict.set(user_config.workspaces, { ws, bufname }, true)
 
     return ws
   end
@@ -375,7 +376,7 @@ end
 
 function buffer.workspace(bufnr, opts)
   opts = opts or {}
-  local pat = opts.pattern or opts.pat or {'.git'}
+  local pat = opts.pattern or opts.pat or { '.git' }
   local depth = opts.depth or opts.check_depth or 4
   local callback = opts.callback
   bufnr = bufnr or vim.fn.bufnr()
@@ -393,5 +394,211 @@ function buffer.workspace(bufnr, opts)
     end
   end
 end
+
+---@class bufferFindOpts
+---@field after? number | boolean
+---@field before? number | boolean
+---@field below? number | boolean
+---@field above? number | boolean
+---@field goto? boolean
+---@field skip_current_line? boolean (default: true)
+
+---Only supports line-based pattern matching. 1-indexed
+---@param buf number
+---@param pattern string | string[]
+---@param opts? bufferFindOpts
+---@return number?
+function buffer.find(buf, pattern, opts)
+  buf = buf or buffer.current()
+  return buffer.call(buf, function()
+    local winid = buffer.winid(buf)
+    opts = opts or {}
+    local above = opts.before or opts.above
+    local below = opts.after or opts.below
+    local above_linenum = type(above) == 'number'
+    local below_linenum = type(below) == 'number'
+    local lc = buffer.line_count(buf)
+    local goto_line = opts.goto
+    pattern = type(pattern) ~= 'table' and { pattern } or pattern
+    -- local check_n_lines = opts.n or -1
+    -- local cursor = opts.cursor or 'line' -- supports 'line' or 'l', 'character' or 'c'
+
+    if above_linenum and (above > lc or above < 1) then
+      return
+    end
+
+    if below_linenum and (below > lc or below < 1) then
+      return
+    end
+
+    if goto_line then
+      local pos = vim.fn.getcurpos(winid)[2]
+      if above and above_linenum then
+        above = above - 1
+      elseif above then
+        above = pos  - 1
+      end
+
+      if below and below_linenum then
+        below = below + 1
+      else
+        below = pos + 1
+      end
+    end
+
+    local function normal_goto_line(linenum)
+      if goto_line then
+        vim.cmd(sprintf('normal! %dG', linenum))
+      end
+    end
+
+    local function get_line(linenum)
+      return buffer.get_lines(0, linenum - 1, linenum, false)[1]
+    end
+
+    local function matches(linenum, line)
+      for _, p in ipairs(pattern) do
+        if string.match(line, p) then
+          normal_goto_line(linenum)
+          return linenum
+        end
+      end
+    end
+
+    local function match_within_lines(start_line, end_line, direction)
+      for linenum = start_line, end_line, direction do
+        local found = matches(linenum, get_line(linenum))
+        if found then
+          return found
+        end
+      end
+    end
+
+    if above then
+      return match_within_lines(above, 1, -1)
+    else
+      return match_within_lines(below, lc, 1)
+    end
+  end)
+end
+
+---@param buf number
+---@param linenum boolean | number
+---@param pattern string | string[]
+---@param opts? bufferFindOpts
+---@return number?
+function buffer.find_below(buf, linenum, pattern, opts)
+  opts = opts or {}
+  opts = vim.deepcopy(opts)
+  opts.below = linenum
+  opts.above = nil
+
+  return buffer.find(buf, pattern, opts)
+end
+
+---@param buf number
+---@param linenum boolean | number
+---@param pattern string | string[]
+---@param opts? bufferFindOpts
+---@return number?
+function buffer.find_above(buf, linenum, pattern, opts)
+  opts = opts or {}
+  opts = vim.deepcopy(opts)
+  opts.above = linenum
+  opts.below = nil
+
+  return buffer.find(buf, pattern, opts)
+end
+
+---@param buf number
+---@param pattern string | string[]
+---@param opts? bufferFindOpts
+---@return number?
+function buffer.find_below_cursor(buf, pattern, opts)
+  opts = opts or {}
+  opts = vim.deepcopy(opts)
+  opts.below = true
+  opts.after = nil
+
+  return buffer.find(buf, pattern, opts)
+end
+
+---@param buf number
+---@param pattern string | string[]
+---@param opts? bufferFindOpts
+---@return number?
+function buffer.find_above_cursor(buf, pattern, opts)
+  opts = opts or {}
+  opts = vim.deepcopy(opts)
+  opts.above = true
+  opts.below = nil
+
+  return buffer.find(buf, pattern, opts)
+end
+
+
+---@param buf number
+---@param linenum boolean | number
+---@param pattern string | string[]
+---@param opts? bufferFindOpts
+---@return number?
+function buffer.find_below_and_goto(buf, linenum, pattern, opts)
+  opts = opts or {}
+  opts = vim.deepcopy(opts)
+  opts.below = linenum
+  opts.above = nil
+  opts.goto = true
+
+  return buffer.find(buf, pattern, opts)
+end
+
+---@param buf number
+---@param linenum boolean | number
+---@param pattern string | string[]
+---@param opts? bufferFindOpts
+---@return number?
+function buffer.find_above_and_goto(buf, linenum, pattern, opts)
+  opts = opts or {}
+  opts = vim.deepcopy(opts)
+  opts.above = linenum
+  opts.below = nil
+  opts.goto = true
+
+  return buffer.find(buf, pattern, opts)
+end
+
+---@param buf number
+---@param pattern string | string[]
+---@param opts? bufferFindOpts
+---@return number?
+function buffer.find_below_cursor_and_goto(buf, pattern, opts)
+  opts = opts or {}
+  opts = vim.deepcopy(opts)
+  opts.below = true
+  opts.after = nil
+  opts.goto = true
+
+  return buffer.find(buf, pattern, opts)
+end
+
+---@param buf number
+---@param pattern string | string[]
+---@param opts? bufferFindOpts
+---@return number?
+function buffer.find_above_cursor_and_goto(buf, pattern, opts)
+  opts = opts or {}
+  opts = vim.deepcopy(opts)
+  opts.above = true
+  opts.below = nil
+  opts.goto = true
+
+  return buffer.find(buf, pattern, opts)
+end
+
+-- \section{1}
+--
+-- \section{2}
+--
+-- \section{3}
 
 return buffer

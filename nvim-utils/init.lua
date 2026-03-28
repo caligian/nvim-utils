@@ -134,15 +134,11 @@ function user_config:set_opts()
 end
 
 function user_config:set_keymaps()
-  vim.schedule(function ()
-    require('config.keymaps')
-  end)
+  require('config.keymaps')
 end
 
 function user_config:set_autocmds()
-  vim.schedule(function ()
-    require('config.autocmds')
-  end)
+  require('config.autocmds')
 end
 
 function user_config:root_dir(bufnr)
@@ -180,5 +176,6 @@ function user_config:setup()
   self:set_keymaps()
   self:set_buffer_groups()
 end
+
 
 return user_config
