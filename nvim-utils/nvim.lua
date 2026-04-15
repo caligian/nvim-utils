@@ -4,8 +4,56 @@ local types = utils.types
 local validate = utils.validate
 local nvim = {}
 
-function nvim.normal()
-  vim.cmd.normal({ vim.fn.mode(), bang = true })
+function nvim.termcode(s)
+  return vim.api.nvim_replace_termcodes(s, true, false, true)
+end
+
+---Run ex string with `normal!`
+---@param ... string
+---@return boolean, string?
+function nvim.normal(...)
+  for _, cmd in ipairs({ ... }) do
+    local ok, _ = pcall(vim.cmd, 'normal! ' .. nvim.termcode(cmd))
+    if not ok then return false end
+  end
+
+  return true
+end
+
+---Run ex string (command prefixed with ':')
+---@param ... string
+---@return boolean, string?
+function nvim.ex(...)
+  for _, cmd in ipairs({ ... }) do
+    local ok, _ = pcall(vim.cmd, ': ' .. cmd)
+    if not ok then return false, cmd end
+  end
+
+  return true, nil
+end
+
+---Run vim command with ex
+---@param ... string
+---@return boolean, string?
+function nvim.cmd(...)
+  for _, cmd in ipairs({ ... }) do
+    local ok, _ = pcall(vim.cmd, cmd)
+    if not ok then return false, cmd end
+  end
+
+  return true, nil
+end
+
+function nvim.noh()
+  nvim.cmd 'noh'
+end
+
+function nvim.next_search()
+  nvim.normal 'n'
+end
+
+function nvim.prev_search()
+  nvim.normal 'N'
 end
 
 function nvim.region(as_list)
@@ -50,9 +98,9 @@ function nvim.ls(dirname, fullname)
   local abspath = fullname and vim.fs.abspath(dirname)
   for f in vim.fs.dir(dirname) do
     if fullname then
-      res[#res+1] = abspath .. '/' .. f
+      res[#res + 1] = abspath .. '/' .. f
     else
-      res[#res+1] = f
+      res[#res + 1] = f
     end
   end
   return res
@@ -139,8 +187,11 @@ function nvim.require(require_path, callback)
   end
 end
 
+---@param prompt string?
+---@param on_input function
+---@param on_nothing? function
 function nvim.input(prompt, on_input, on_nothing)
-  vim.ui.input({prompt = prompt}, function (input)
+  vim.ui.input({ prompt = prompt or '% ' }, function(input)
     if not input then
       return false
     elseif #input > 0 then
@@ -152,9 +203,11 @@ function nvim.input(prompt, on_input, on_nothing)
 end
 
 function nvim.select(choices, prompt, on_choice, formatter)
-  vim.ui.select(choices, {prompt = prompt, format_item = formatter}, on_choice)
+  vim.ui.select(
+    choices,
+    { prompt = prompt, format_item = formatter },
+    on_choice
+  )
 end
-
-
 
 return nvim
