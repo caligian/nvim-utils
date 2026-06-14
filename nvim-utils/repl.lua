@@ -5,7 +5,9 @@ local dict = utils.dict
 local validate = utils.validate
 local buffer = require 'nvim-utils.buffer'
 local terminal = require('nvim-utils.terminal')
-local repl = class('Repl', terminal)
+
+repl = class('Repl', terminal)
+user_config.repl = user_config.repl or {}
 
 -- opts = {
 --   command = types.string,
@@ -19,13 +21,14 @@ local repl = class('Repl', terminal)
 --     apply = types.fun
 --   }
 -- }
---
+
 function repl:initialize(cwd, opts)
-  self.root_pattern = dict.get(opts, {'root', 'pattern'})
-  self.root_check_depth = dict.get(opts, {'root', 'check_depth'})
-  self.input_use_file = dict.get(opts, {'input', 'use_file'})
-  self.input_file_string = dict.get(opts, {'input', 'file_string'})
-  self.input_apply = dict.get(opts, {'input', 'apply'})
+  opts = opts or {}
+  self.root_pattern = dict.get(opts, { 'root', 'pattern' })
+  self.root_check_depth = dict.get(opts, { 'root', 'check_depth' })
+  self.input_use_file = dict.get(opts, { 'input', 'use_file' })
+  self.input_file_string = dict.get(opts, { 'input', 'file_string' })
+  self.input_apply = dict.get(opts, { 'input', 'apply' })
   self.filetype = opts.filetype or opts.ft
   self.ft = self.filetype
   self.shell = opts.shell
@@ -35,27 +38,27 @@ function repl:initialize(cwd, opts)
   if self.shell then
     self.cmd = user_config.shell_command or 'bash'
     self.command = self.cmd
-    user_config.repls.shells[cwd] = self
+    user_config.repl.shell[cwd] = self
   else
     validate.filetype(opts.filetype, types.string)
-    user_config.repls.repls[cwd] = user_config.repls.repls[cwd] or {}
-    user_config.repls.repls[cwd][self.filetype] = self
+    user_config.repl.repl[cwd] = user_config.repl.repl[cwd] or {}
+    user_config.repl.repl[cwd][self.filetype] = self
   end
 end
 
 function repl:exists(callback)
   local exists
   if self.shell then
-    exists = user_config.repls.shells[self.cwd]
+    exists = user_config.repl.shell[self.cwd]
   else
     exists = dict.get(
-      user_config.repls.repls,
-      {self.cwd, self.filetype}
+      user_config.repl.repl,
+      { self.cwd, self.filetype }
     )
   end
 
   if exists then
-    return ifelse(callback, callback(exists), exists)
+    return defined(callback) and callback(exists) or exists
   else
     return false
   end
@@ -73,7 +76,7 @@ function repl:send(s)
     s = self.input_file_string:format(filename)
 
     local timer = vim.uv.new_timer()
-    timer:start(10000, 0, vim.schedule_wrap(function ()
+    timer:start(10000, 0, vim.schedule_wrap(function()
       pcall(vim.fs.rm, filename)
       timer:stop()
       timer:close()
@@ -84,21 +87,21 @@ function repl:send(s)
 end
 
 function repl.get(bufnr, shell, running)
-  local cwd = user_config:root_dir(bufnr)
+  local cwd = buffer.get_root_dir(bufnr)
   if not cwd then
     return false
   end
 
   local exists
   if shell then
-    exists = user_config.repls.shells[cwd]
+    exists = user_config.repl.shell[cwd]
   else
-    local ft = buffer.filetype(bufnr)
-    exists = dict.get(user_config.repls.repls, {cwd, ft})
+    local _, ft = buffer.get_filetype(bufnr)
+    exists = dict.get(user_config.repl.repl, { cwd, ft })
   end
 
   if exists then
-    if running and not exists:running() then
+    if running and not exists:is_running() then
       return false
     else
       return exists
@@ -112,34 +115,34 @@ function repl.create(bufnr, shell)
     return exists
   end
 
-  local ws = user_config:root_dir(bufnr)
+  local ws = buffer.get_root_dir(bufnr)
   if not ws then
     return false
   end
 
-  local ft = buffer.filetype(bufnr)
-  local opts = dict.get(user_config.filetypes, {ft, 'repl'})
-  opts = opts or dict.get(user_config.filetypes, {'shell', 'repl'})
+  local _, ft = buffer.get_filetype(bufnr)
+  local opts = dict.get(user_config.filetype, { ft, 'repl' })
+  opts = opts or dict.get(user_config.filetype, { 'shell', 'repl' })
 
   if not opts then
     return false
   elseif shell then
-    opts = dict.merge(vim.deepcopy(opts), {shell = true})
+    opts = dict.merge(vim.deepcopy(opts), { shell = true })
   else
-    opts = dict.merge(vim.deepcopy(opts), {filetype = ft})
+    opts = dict.merge(vim.deepcopy(opts), { filetype = ft })
   end
 
   return repl(ws, opts)
 end
 
 function repl.start_shell()
-  if not user_config.repls.shell then
-    user_config.repls.shell = terminal(
+  if not user_config.repl.sh then
+    user_config.repl.sh = terminal(
       user_config.shell_command,
       os.getenv('HOME')
     )
   end
-  local term = user_config.repls.shell
+  local term = user_config.repl.sh
   if not term then
     return false
   else

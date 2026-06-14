@@ -1,89 +1,184 @@
+require 'nvim-utils.state'
+require 'nvim-utils.autocmd'
+
 local utils = require 'lua-utils'
 local types = utils.types
 local class = utils.class
 local validate = utils.validate
-local autocmd = require 'nvim-utils.autocmd'
+
 
 --- Create autocommand group
---- @class augroup
-local augroup = class 'Augroup'
+---@class augroup
+---@field name string
+---@field autocmd table<string,autocmd> Contains all added autocommands
+---@field uid? number Unique ID returned by vim
+---@overload fun(name: string)
+augroup = class 'augroup'
+user_config.augroup = user_config.augroup or {}
+user_config.augroup_by_uid = user_config.augroup_by_uid or {}
 
---- Augroups
-function augroup:initialize(name)
+function augroup:initialize(name, clear)
+  assert(type(name) == 'string', 'No augroup name provided')
+
   self.name = name
-  self.autocmds = {}
-  self.id = vim.api.nvim_create_augroup(self.name, {clear = true})
-  user_config.augroups[self.name] = self
-  user_config.augroups[self.id] = self
+  if self:exists() and not clear then
+    errorf('augroup.%s: Already exists', self.name)
+  end
+
+  self.autocmd = {}
+  self.autocmd_by_uid = {}
+  self.uid = vim.api.nvim_create_augroup(self.name, {clear = clear})
+
+  user_config.augroup[self.name] = self
+  user_config.augroup_by_uid[self.uid] = self
 end
 
-function augroup:delete()
-  if self.id then
-    for _, au in pairs(self.autocmds) do au:delete() end
-    vim.api.nvim_del_augroup_by_id(self.id)
-    user_config.augroups[self.name] = nil
-    user_config.augroups[self.id] = nil
-    self.id = nil
-    self.autocmds = {}
+function augroup:exists()
+  if vim.fn.exists('#' .. self.name) == 1 then
     return true
-  end
-end
-
-augroup.del = augroup.delete
-
-function augroup:delete_autocmd(name_or_id)
-  if type(name_or_id) == 'string' then
-    name_or_id = self.name .. '.' .. name_or_id
-  end
-
-  local au = self.autocmds[name_or_id]
-  if au == nil then
-    return
   else
-    au:delete()
-    self.autocmds[au.name] = nil
-    return true
+    return false
   end
 end
 
-augroup.del_autocmd = augroup.delete_autocmd
-
-function augroup:add_autocmd(event, pattern, callback, opts)
-  if not self.id then
+---@return boolean 
+function augroup:disable()
+  if not self:exists() then
     return false
   end
 
-  opts = opts or {}
-  validate.opts(opts, 'table')
+  for _, au in pairs(self.autocmd) do au:disable() end
+  vim.api.nvim_del_augroup_by_id(self.uid)
 
-  opts = vim.deepcopy(opts)
-  opts.group = self.id
+  self.uid = false
+  self.autocmd = {}
+  self.autocmd_by_uid = {}
 
-  if self.name and opts.name then
-    opts.name = self.name .. '.' .. opts.name
+  return true
+end
+
+---@param name_or_id string|number
+---@return boolean
+function augroup:has(name_or_id)
+  return self:get(name_or_id) ~= nil
+end
+
+---@param name_or_id string|number
+---@return autocmd?
+function augroup:get(name_or_id)
+  return self.autocmd_by_uid[name_or_id] or self.autocmd[name_or_id] 
+end
+
+---@param name_or_id string|number
+---@return autocmd?
+function augroup:pop(name_or_id)
+  if not name_or_id:match(self.name) then
+    name_or_id = self.name .. '.' .. name_or_id
   end
 
-  opts.group = self.id
-  local au = autocmd(event, pattern, callback, opts)
+  local au = self:get(name_or_id)
+  if au == nil then
+    return
+  else
+    self.augroup_by_uid[au.uid] = nil
+    self.augroup[au.name] = nil
+    au:disable()
 
-  if au.name then self.autocmds[au.name] = au end
-  self.autocmds[#self.autocmds+1] = au
+    return au
+  end
+end
+
+---@param event string|string[]
+---@param callback string|function
+---@param opts? autocmdOpts
+---@return autocmd?
+function augroup:append(event, callback, opts)
+  if not self:exists() then
+    return 
+  end
+
+  opts = opts or {}
+  opts = vim.deepcopy(opts)
+  opts.group = self.uid
+  local name = opts.name
+
+  if name and not name:match(self.name) then
+    opts.name = self.name .. '.' .. name
+  end
+
+  opts.group = self.uid
+  local au = autocmd.set(event, callback, opts)
+
+  if au.name then
+    self.autocmd[au.name] = au 
+  end
+
+  self.autocmd[au.name] = au
+  self.autocmd_by_uid[au.uid] = au
 
   return au
 end
 
-function augroup:add_autocmds(specs)
-  for name, spec in pairs(specs) do
-    validate.autocmd(spec, types.table)
-    local event, pattern, callback, opts = unpack(spec)
-    opts = vim.deepcopy(opts)
-    opts.name = name
-    self:add_autocmd(event, pattern, callback, opts)
+---Other augroup utils stuff
+augroup.utils = {}
+local group_utils = augroup.utils
+
+---@param name_or_id number|string
+---@return augroup
+function group_utils.get(name_or_id)
+  return user_config.autocmd_by_uid[name_or_id] or user_config.autocmd[name_or_id]
+end
+
+---@param name_or_id number|string
+---@return boolean
+function group_utils.exists(name_or_id)
+  return group_utils.get(name_or_id) ~= nil
+end
+
+---Create a new augroup if it does not exist
+---@param name string
+---@param force? boolean
+---@return augroup
+function group_utils.new(name, force)
+  if force then
+    return augroup(name)
+  end
+
+  local exists = group_utils.get(name)
+  if exists:exists() then
+    return exists
+  else
+    return augroup(name)
   end
 end
 
-if not user_config.default_augroup then
-  user_config.default_augroup = augroup 'user_config'
+---@param name string
+---@param specs table<string|number,autocmd>
+---@return augroup
+function augroup.set(name, clear, specs)
+  local group = group_utils.get(name) or augroup(name, clear)
+
+  if specs then
+    for au_name, au_spec in pairs(specs) do
+      au_name = tostring(au_name)
+      local event, callback, opts = unpack(au_spec)
+      opts = vim.deepcopy(opts)
+      opts.name = au_name
+      group:append(event, callback, opts)
+    end
+  end
+
+  return group
 end
+
+augroup.push = augroup.append
+
+if not user_config.default_augroup then
+  user_config.default_augroup = augroup 'UserConfig'
+end
+
+-- augroup.set('MyConfig', {
+--   test = {'BufEnter', ':echo "world"', {pattern = "*.txt"}}
+-- })
 
 return augroup

@@ -1,124 +1,119 @@
 local lutils = require 'lua-utils'
 local types = lutils.types
 local validate = lutils.validate
-keymap = {define = {}}
-setmetatable(keymap, keymap)
-setmetatable(keymap.define, keymap.define)
+local class = lutils.class
+local dict = lutils.dict
 
-function keymap.opts(opts)
-  local name = opts.name
-  local au_opts = {group = opts.group or 'user_config.keymaps'}
-  local kbd_opts = {}
-  local res = {
-    autocmd = au_opts,
-    keymap = kbd_opts,
-    name = name
-  }
+local utils = require 'nvim-utils.utils'
+require 'nvim-utils.autocmd'
 
-  if name then
-    validate.name(name, types.string)
+---@class keymapOpts
+---@field desc? string
+---@field buffer? number
+---@field pattern? string|string[]
+---@field event? string|string[]
+---@field filetype? string|string[]
+---@field once? boolean
+---@field nested? boolean
+---@field expr? boolean
+---@field noremap? boolean
+---@field replace_keycodes? boolean
+---@field remap? boolean
+
+---@class keymap : keymapOpts
+---@field modes string|string[]
+---@field lhs string
+---@field rhs string
+---@overload fun(modes: string|string[], lhs: string, rhs: string, opts?: keymapOpts)
+keymap = class 'keymap'
+keymap.valid_opts = {'remap', 'buffer', 'expr', 'noremap', 'desc', 'callback', 'replace_keycodes'}
+keymap.valid_autocmd_opts = autocmd.valid_opts
+
+---Contains all the keymap objects
+user_config.keymap = user_config.keymap or {}
+
+local function get_id(name)
+  return name or (#user_config.keymap + 1)
+end
+
+local function save_id(self, name)
+  local id = get_id(name)
+  self.name = id
+  user_config.keymap[id] = self
+end
+
+function keymap:opts()
+  local res = {autocmd = {}, keymap = {}, name = self.name or get_id(self.name)}
+
+  for _, au_key in ipairs(keymap.valid_autocmd_opts) do
+    res.autocmd[au_key] = self[au_key]
   end
 
-  if opts.event or opts.pattern then
-    au_opts[1] = opts.event or 'BufRead'
-    au_opts[2] = { pattern = opts.pattern or '*' }
-    if name then au_opts[2].desc = name end
-  elseif opts.filetype or opts.ft then
-    local ft = opts.filetype or opts.ft
-    validate.filetype(ft, types.string)
-
-    au_opts[1] = 'FileType'
-    au_opts[2] = {pattern = ft}
-
-    if name then
-      au_opts[2].desc = sprintf('filetype.%s.%s', ft, name)
-    end
+  for _, key in ipairs(keymap.valid_opts) do
+    res.keymap[key] = self[key]
   end
-
-  if name and not opts.desc then
-    kbd_opts.desc = name
-  end
-
-  for key, value in pairs(opts) do
-    if key ~= 'filetype'  and
-      key ~= 'event' and
-      key ~= 'pattern' and
-      key ~= 'name'
-    then
-      kbd_opts[key] = value
-    end
-  end
-
-  if #au_opts == 0 then
-    res.autocmd = nil
-  end
-
-  res.name = name
 
   return res
 end
 
-function keymap.set(modes, lhs, rhs, opts)
-  opts = keymap.opts(opts or {})
+
+---@param modes string|string[]
+---@param lhs string
+---@param rhs string|function
+---@param opts? keymapOpts
+---@return keymap
+function keymap:initialize(modes, lhs, rhs, opts)
+  self.modes = modes
+  self.lhs = lhs
+  self.rhs = rhs
+
+  opts = opts or {}
+  dict.merge(self, opts)
+  save_id(self, opts.name)
+
+  return self
+end
+
+function keymap:enable()
+  local opts = self:opts()
   local au_opts = opts.autocmd
   local kbd_opts = opts.keymap
   local name = opts.name
 
-  if name then
-    user_config.keymaps[name] = {
-      args = {modes, lhs, rhs, kbd_opts},
-      autocmd = opts.autocmd
-    }
-  else
-    user_config.keymaps[#user_config.keymaps+1] = {
-      args = {modes, lhs, rhs, kbd_opts},
-      autocmd = opts.autocmd
-    }
-  end
-
-  if au_opts then
-    au_opts[2].callback = function (args)
-      local _opts = vim.deepcopy(kbd_opts)
-      _opts.desc = _opts.desc or name
-      _opts.buffer = args.buf
-      vim.keymap.set(modes, lhs, rhs, _opts)
+  if self.event or self.pattern then
+    local callback = function (args)
+      kbd_opts = vim.deepcopy(kbd_opts)
+      kbd_opts.buffer = args.buf
+      vim.keymap.set(self.modes, self.lhs, self.rhs, kbd_opts)
     end
-    vim.api.nvim_create_autocmd(au_opts[1], au_opts[2])
+    autocmd.set(self.event, callback, au_opts)
   else
-    vim.keymap.set(modes, lhs, rhs, kbd_opts)
+    vim.keymap.set(self.modes, self.lhs, self.rhs, kbd_opts)
   end
-
-  return {args = {modes, lhs, rhs, kbd_opts}, autocmd = au_opts}
 end
 
-function keymap:__call(modes, lhs, rhs, opts)
-  if not lhs then
-    validate.args(modes, types.table)
-    lhs = modes[2] or modes.lhs
-    rhs = modes[3] or modes.rhs
-    opts = modes[4] or modes.opts or {}
-    modes = modes[1] or modes.mode
-  end
-
-  return keymap.set(modes, lhs, rhs, opts)
+function keymap.set(modes, lhs, rhs, opts)
+  keymap(modes, lhs, rhs, opts):enable()
+  return self
 end
 
+keymap.define = bless {}
 function keymap.define:__index(name)
   return function (modes, lhs, rhs, opts)
-    opts = vim.deepcopy(opts)
-    opts.name = name
-    return keymap(modes, lhs, rhs, opts)
+    keymap.set(modes, lhs, rhs, opts)
   end
 end
 
-function keymap.define:__call(args)
-  for key, value in pairs(args) do
-    if type(key) == 'number' then
-      keymap.set(unpack(value))
-    else
-      keymap.define[key](unpack(value))
-    end
+function keymap.define:__call(specs)
+  local res = {}
+  for key, value in pairs(specs) do
+    local modes, lhs, rhs, o = unpack(value)
+    o = dict.merge(vim.deepcopy(o or {}), opts) 
+    o.name = o.name or key
+    local kbd = keymap.set(modes, lhs, rhs, o)
+    res[o.name] = kbd
   end
+  return res
 end
 
 return keymap

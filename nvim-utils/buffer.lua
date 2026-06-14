@@ -1,11 +1,135 @@
+require 'nvim-utils.state'
+local nvim = require 'nvim-utils.nvim'
 local utils = require 'lua-utils'
 local list = utils.list
 local dict = utils.dict
 local types = utils.types
-local buffer = {}
-user_config.buffer = buffer
+local path = utils.path
 
-buffer.call = vim.api.nvim_buf_call
+local function vcmd(fmt, ...)
+  vim.cmd(sprintf(fmt, ...))
+end
+
+---@param bufnr? number
+---@param msg string
+---@param err? boolean Throw error
+---@return string
+local function buf_msg(bufnr, fmt, ...)
+  bufnr = vim.fn.bufnr(bufnr)
+  return sprintf('buffer[%d]: %s', bufnr, sprintf(fmt, ...))
+end
+
+---@param bufnr? number
+---@param msg string
+---@param err? boolean Throw error
+---@return string
+local function win_msg(winid, fmt, ...)
+  local bufnr = vim.fn.winbufnr(winid)
+  return sprintf('buffer[%d].winid[%d]: %s', bufnr, winid, sprintf(fmt, ...))
+end
+
+function err_buf_msg(bufnr, fmt, ...)
+  error(buf_msg(bufnr, fmt, ...))
+end
+
+function err_win_msg(winid, fmt, ...)
+  error(win_msg(winid, fmt, ...))
+end
+
+---@param bufnr number
+---@return boolean
+local function is_valid_bufnr(bufnr)
+  return
+      type(bufnr) == 'number' and
+      bufnr ~= 0 and
+      vim.api.nvim_buf_is_valid(bufnr)
+end
+
+---@param bufnr number
+---@return boolean, number|string
+local function validate_bufnr(bufnr)
+  if bufnr == nil then
+    bufnr = vim.api.nvim_get_current_buf()
+  end
+
+  if is_valid_bufnr(bufnr) then
+    return true, bufnr
+  else
+    return false, buf_msg(bufnr, 'Invalid buffer')
+  end
+end
+
+---Buffer utilities
+buffer = {}
+
+--- vim.api.nvim_buf_*
+buffer.vim = {}
+function buffer.vim:__index(name)
+  if not name:match '^nvim_buf_' then
+    name = 'nvim_buf_' .. name
+  end
+
+  local f = vim.api[name]
+  assert(f ~= nil, sprintf('vim.api.%s: Nonexistent function'))
+
+  return f
+end
+
+setmetatable(buffer.vim, buffer.vim)
+
+--- vim.api.nvim_buf_* with pcall
+buffer.safe_vim = {}
+function buffer.safe_vim:__index(name)
+  if not name:match '^nvim_buf_' then
+    name = 'nvim_buf_' .. name
+  end
+
+  local f = vim.api[name]
+  assert(f ~= nil, sprintf('vim.api.%s: Nonexistent function'))
+
+  return function(...)
+    return pcall(f, ...)
+  end
+end
+
+setmetatable(buffer.safe_vim, buffer.safe_vim)
+
+--- Disambiguating return values
+---@class buffer_returns
+---@field [1] table<string,function> Returns one value
+---@field [2] table<string,function> Returns two values
+---@field one table<string,function> Returns one value
+---@field two table<string,function> Returns two values
+---@field pcall table<string,function> Returns two values
+---@field result table<string,function> Returns {ok = table<number|string, any>, err = table<number|string, any>}
+buffer.returns = {}
+buffer.returns[1] = {}
+buffer.returns[2] = {}
+buffer.returns.one = buffer.returns[1]
+buffer.returns.two = buffer.returns[2]
+buffer.returns.pcall = buffer.returns[2]
+
+---@class buffer_result
+---@field ok table<string, any> | table<string, table<string, any>>
+---@field err table<string, string> | table<string, table<string, any>>
+
+local function get_opts(opts, should_deepcopy, assert_keys)
+  if opts == nil then
+    opts = {}
+  elseif should_deepcopy then
+    opts = vim.deepcopy(opts)
+  end
+
+  if assert_keys then
+    for i = 1, #assert_keys do
+      local k = assert_keys[i]
+      assert(opts[k], sprintf("opts.%s: Missing keys", k))
+    end
+  end
+
+  return opts
+end
+
 buffer.del_keymap = vim.api.nvim_buf_del_keymap
 buffer.del_var = vim.api.nvim_buf_del_var
 buffer.get_var = vim.api.nvim_buf_get_var
@@ -13,165 +137,848 @@ buffer.set_var = vim.api.nvim_buf_set_var
 buffer.get_lines = vim.api.nvim_buf_get_lines
 buffer.get_text = vim.api.nvim_buf_get_text
 buffer.get_name = vim.api.nvim_buf_get_name
-buffer.is_valid = vim.api.nvim_buf_is_valid
-buffer.line_count = vim.api.nvim_buf_line_count
 buffer.set_keymap = vim.api.nvim_buf_set_keymap
 buffer.set_name = vim.api.nvim_buf_set_name
 buffer.set_text = vim.api.nvim_buf_set_text
 buffer.set_lines = vim.api.nvim_buf_set_lines
-buffer.winid = vim.fn.bufwinid
-buffer.winnr = vim.fn.bufwinnr
 buffer.get_name = vim.api.nvim_buf_get_name
-buffer.name = buffer.get_name
-buffer.get_winid = vim.fn.bufwinid
-buffer.get_winnr = vim.fn.bufwinnr
-buffer.winid = vim.fn.bufwinid
-buffer.winnr = vim.fn.bufwinnr
 buffer.set_current = vim.api.nvim_set_current_buf
 buffer.get_current = vim.api.nvim_get_current_buf
-buffer.current = buffer.get_current
-buffer.length = buffer.line_count
 
-function buffer.delete(bufnr, force)
-  force = ifnil(force, true, false)
-  vim.api.nvim_buf_delete(bufnr, { force = true })
+---@param bufnr number
+---@return string?
+function buffer.get_name(bufnr)
+  if vim.fn.bufnr(bufnr) == -1 then
+    return nil
+  else
+    return vim.api.nvim_buf_get_name(bufnr)
+  end
 end
 
-buffer.del = buffer.delete
+---@param bufnr number
+---@param name string
+---@return boolean, string?
+function buffer.set_name(bufnr, name)
+  local ok, buf = validate_bufnr(bufnr)
+  if not ok then return false, buf end
 
+  ok, _ = pcall(vim.api.nvim_buf_set_name, buf, name)
+  if not ok then
+    return false, sprintf('buffer[%d]: Could not set buffer name `%s`', buf, name)
+  else
+    return true, name
+  end
+end
+
+---@param bufnr number
+---@param start int
+---@param end   int
+---@param lines []string | string
+---@return boolean, string?
+function buffer.set_lines(bufnr, start_row, end_row, lines)
+  return buffer.get_id(bufnr, {
+    ok = function(buf)
+      lines = type(lines) == 'string' and vim.split(lines, "\n") or lines
+      local ok, msg = pcall(vim.api.nvim_buf_set_lines, buf, start_row, end_row, false, lines)
+      if ok then
+        return true, nil
+      else
+        return false, msg
+      end
+    end,
+    err = function(msg)
+      return false, msg
+    end
+  })
+end
+
+---@param bufnr number
+---@param f fun(bufnr: number): any
+---@return boolean, any
+function buffer.call(bufnr, f)
+  return buffer.get_id(bufnr, {
+    ok = function(buf)
+      local use_f = function() return f(buf) end
+      return pcall(vim.api.nvim_buf_call, buf, use_f)
+    end,
+    err = function(msg)
+      return false, msg
+    end
+  })
+end
+
+---@param bufnr number
+---@return boolean
+function buffer.is_valid(bufnr)
+  assert(type(bufnr) == 'number', 'bufnr: Must be a number')
+  assert(bufnr ~= 0, 'bufnr: Cannot use 0 as a buffer number')
+  return vim.api.nvim_buf_is_valid(bufnr)
+end
+
+---@param bufnr number
+---@return boolean
+function buffer.is_invalid(bufnr)
+  assert(type(bufnr) == 'number', 'bufnr: Must be a number')
+  assert(bufnr ~= 0, 'bufnr: Cannot use 0 as a buffer number')
+  return not vim.api.nvim_buf_is_valid(bufnr)
+end
+
+buffer.defined = buffer.is_valid
+buffer.undefined = buffer.is_invalid
+
+---@class buffer_id_opts
+---@field ok (fun(bufnr: number): any)|(fun(bufnr: number): boolean, any)
+---@field err (fun(msg?: string): any)|(fun(bufnr: number): boolean, any)
+---@field strict? boolean Do not allow even nil values
+
+--- Normalize buffer id (No 0s allowed)
+---@param bufnr? number
+---@param opts buffer_id_opts
+---@return any
+---@overload fun(): number
+---@overload fun(bufnr: number): number?
+---@overload fun(bufnr: number, opts: buffer_id_opts): any
+---@overload fun(bufnr: nil, opts: buffer_id_opts): any
+---@overload fun(bufnr: number, opts: buffer_id_opts): boolean, any
+---@overload fun(bufnr: nil, opts: buffer_id_opts): boolean, any
+function buffer.id(bufnr, opts)
+  assert(bufnr ~= 0, "bufnr: Cannot use 0 as a valid buffer number")
+  assert(opts ~= nil, "opts is missing")
+  assert(opts.ok, "opts.ok: Missing callback")
+  assert(opts.err, "opts.err: Missing callback")
+
+  local err = opts.err
+  local ok = opts.ok
+
+  if opts.strict then
+    assert(bufnr ~= nil, 'bufnr: Cannot be nil')
+  end
+
+  if bufnr == nil then
+    return ok(buffer.get_current())
+  elseif buffer.is_valid(bufnr) then
+    return ok(bufnr)
+  elseif err then
+    return err(sprintf("buffer[%d]: Invalid buffer", bufnr))
+  end
+end
+
+buffer.get_id = buffer.id
+
+---@param bufnr number
+---@return number?
+function buffer.get_line_count(bufnr)
+  return buffer.id(bufnr, {
+    ok = function(buf)
+      return true, vim.api.nvim_buf_line_count(buf)
+    end,
+    err = function(msg)
+      return false, msg
+    end
+  })
+end
+
+---@class buffer_rm_opts
+---@field force? boolean (default: true)
+---@field unload? boolean (default: false)
+
+---@param bufnr number
+---@param opts? buffer_rm_opts
+---@return boolean
+function buffer.rm(bufnr, opts)
+  opts = opts or {}
+  return buffer.id(bufnr, {
+    ok = function(buf)
+      local force = when_nil(opts.force, L(true), L(false))
+      local unload = opts.unload
+      return (pcall(
+        vim.api.nvim_buf_delete,
+        buf, { force = force, unload = unload }
+      ))
+    end,
+    err = function()
+      return false, nil
+    end
+  })
+end
+
+---@param bufnr number
+---@return boolean
 function buffer.exists(bufnr)
   return vim.fn.bufexists(bufnr) == 1
 end
 
-function buffer.loaded(bufnr)
+---@param bufnr number
+---@return boolean
+function buffer.is_loaded(bufnr)
   return vim.fn.bufloaded(bufnr) == 1
 end
 
+---@param bufnr number
+---@param var string
+---@return boolean, string?
+function buffer.del_var(bufnr, var)
+  local ok, buf = validate_bufnr(bufnr)
+  if not ok then return false, buf end
+
+  ok, value = buffer.get_var(buf, var)
+  if not ok then
+    return false, value
+  end
+
+  local msg
+  ok, msg = pcall(vim.api.nvim_buf_del_var, buf, var)
+
+  if ok then
+    return true, value
+  else
+    return false, msg
+  end
+end
+
+---@param bufnr number
+---@param var string
+---@return boolean, string?
+function buffer.get_var(bufnr, var)
+  return buffer.id(bufnr, {
+    ok = function(buf)
+      local ok, msg_or_value = pcall(vim.api.nvim_buf_get_var, buf, var)
+      if ok then
+        return true, msg_or_value
+      else
+        return false, msg_or_value
+      end
+    end,
+    err = function(msg)
+      return false, msg
+    end
+  })
+end
+
+---@param bufnr number
+---@param vars []string
+---@return boolean, buffer_result|string
+function buffer.get_vars(bufnr, vars)
+  return buffer.id(bufnr, {
+    ok = function(buf)
+      local result = { ok = {}, err = {} }
+      for var in ipairs(vars) do
+        local ok, msg_or_value = buffer.get_var(buf, var)
+        if ok then
+          result.ok[var] = msg_or_value
+        else
+          result.err[var] = msg_or_value
+        end
+      end
+      return true, result
+    end,
+    err = function(msg)
+      return false, msg
+    end
+  })
+end
+
+---@param bufnr number
+---@param var string
+---@param value any
+---@return boolean, any
+function buffer.set_var(bufnr, var, value)
+  return buffer.id(bufnr, {
+    ok = function(buf)
+      local ok, msg = pcall(vim.api.nvim_buf_set_var, var, value)
+      if ok then
+        return true, value
+      else
+        return false, msg
+      end
+    end,
+    err = function(msg)
+      return false, msg
+    end,
+  })
+end
+
+---@param bufnr number
+---@param values table<string,any>
+---@return boolean, buffer_result|string
+function buffer.set_vars(bufnr, values)
+  return buffer.id(bufnr, {
+    ok = function(buf)
+      res = { ok = {}, err = {} }
+      local res_ok = res.ok
+      local res_err = res.err
+      for var, value in ipairs(values) do
+        local ok, value_or_msg = buffer.set_var(buf, var, value)
+        if ok then
+          res_ok[var] = value_or_msg
+        else
+          res_err[var] = value_or_msg
+        end
+      end
+      return true, res
+    end,
+    err = function(msg) return false, msg end
+  })
+end
+
+---@param bufnr? number
+---@param name string
+---@return boolean, any
 function buffer.get_opt(bufnr, name)
-  return vim.api.nvim_get_option_value(name, { buf = bufnr })
+  return buffer.get_id(bufnr, {
+    ok = function(buf)
+      local ok, msg_or_value = pcall(vim.api.nvim_get_option_value, name, { buf = buf })
+      if ok then
+        return true, msg_or_value
+      else
+        return false, msg_or_value
+      end
+    end,
+    err = function(msg) return false, msg end
+  })
 end
 
+---@param bufnr number
+---@param names []string
+---@return boolean, buffer_result|string
+function buffer.get_opts(bufnr, names)
+  return buffer.get_id(bufnr, {
+    ok = function(buf)
+      res = { ok = {}, err = {} }
+      local res_ok = res.ok
+      local res_err = res.err
+      for _, name in ipairs(names) do
+        local ok, value_or_msg = buffer.get_opt(buf, name)
+        if ok then
+          res_ok[name] = value_or_msg
+        else
+          res_err[name] = value_or_msg
+        end
+      end
+      return true, res
+    end,
+    err = function(msg) return false, msg end
+  })
+end
+
+---@param bufnr? number
+---@param name string
+---@param value any
+---@return boolean, string?
 function buffer.set_opt(bufnr, name, value)
-  return vim.api.nvim_set_option_value(name, value, { buf = bufnr })
+  return buffer.get_id(bufnr, {
+    ok = function(buf)
+      local ok, msg = pcall(vim.api.nvim_set_option_value, name, value, { buf = buf })
+      if ok then
+        return ok, value
+      else
+        return false, msg
+      end
+    end,
+    err = function(msg) return false, msg end
+  })
 end
 
-function buffer.get(name, create)
+---@param bufnr number
+---@param values table<string, any>
+---@return boolean, buffer_result|string
+function buffer.set_opts(bufnr, values)
+  return buffer.get_id(bufnr, {
+    ok = function(buf)
+      res = { ok = {}, err = {} }
+      for k, v in pairs(values) do
+        local ok, msg = buffer.set_opt(buf, k, v)
+        if ok then
+          res.ok[k] = msg
+        else
+          res.err[k] = msg
+        end
+      end
+      return true, res
+    end,
+    err = function(msg)
+      return false, msg
+    end
+  })
+end
+
+---@class buffer_new_autocmd
+---@field [1] string|[]string events
+---@field [2] string|function command|callback()
+---@field [3] table
+---
+---@class buffer_new_keymap
+---@field [1] string|[]string modes
+---@field [2] string keys
+---@field [3] string|function command|callback()
+---@field [4] table table<string,any>
+
+---@class buffer_new_opts
+---@field config? fun(buf: number)
+---@field opts? table<string,any>
+---@field vars? table<string,any>
+---@field autocmd? []buffer_new_autocmd
+---@field keymap? []buffer_new_keymap
+
+---@param name? string
+---@param opts? buffer_new_opts
+---@return number?
+function buffer.new(name, opts)
+  opts = opts or {}
   name = name or vim.fn.tempname()
-  return vim.fn.bufnr(name, create)
+  local bufnr = vim.fn.bufnr(name, true)
+
+  if bufnr == -1 then
+    return nil
+  end
+
+  local vars = opts.vars
+  local options = opts.opts
+  local config = opts.config
+  local autocmds = opts.autocmd or opts.hooks
+  local keymaps = opts.keymap or opts.mappings
+
+  if options then
+    for k, v in pairs(options) do
+      vim.api.nvim_set_option_value(k, v, { buf = bufnr })
+    end
+  end
+
+  if vars then
+    for k, v in pairs(vars) do
+      vim.api.nvim_buf_set_var(bufnr, k, v)
+    end
+  end
+
+  if config then
+    vim.api.nvim_buf_call(bufnr, function() config(bufnr) end)
+  end
+
+  vim.api.nvim_buf_call(bufnr, function()
+    vim.keymap.set('n', 'q', ':call HideWindowIfPossible()', { desc = 'Hide window', buffer = vim.fn.bufnr() })
+    vim.keymap.set('n', 'Q', ':call WipeoutWindowIfPossible()', { desc = 'Hide window', buffer = vim.fn.bufnr() })
+  end)
+
+  if keymaps then
+    for i, spec in ipairs(keymaps) do
+      assert(
+        type(spec) == 'table' and #spec >= 3,
+        sprintf('%s', 'specs[%d]: Expected at least 3 arguments, got %s', i, spec)
+      )
+      local modes, keys, command, o = unpack(spec)
+      o = vim.deepcopy(o or {})
+      o.buffer = bufnr
+      vim.keymap.set(modes, keys, command, o)
+    end
+  end
+
+  if autocmds then
+    for i, au in ipairs(autocmds) do
+      assert(
+        type(au) == 'table' and #au >= 2,
+        sprintf('%s', 'autocmds[%d]: Expected at least 2 arguments, got %s', i, au)
+      )
+
+      local event, command, o = unpack(au)
+      o = vim.deepcopy(o or {})
+      o.buffer = bufnr
+
+      if type(command) == 'string' then
+        o.command = command
+      else
+        o.callback = command
+      end
+
+      vim.api.nvim_create_autocmd(event, o)
+    end
+  end
+
+  return bufnr
 end
 
-function buffer.wordcount(bufnr)
+---@param bufnr
+---@return boolean, table<string|number, number>
+function buffer.get_word_count(bufnr)
   return buffer.call(bufnr, function()
     return vim.fn.wordcount()
   end)
 end
 
-function buffer.get_line(bufnr, linenum)
-  bufnr = bufnr or buffer.current()
-  local ok, msg = pcall(
-    vim.api.nvim_buf_get_lines,
-    bufnr, linenum, linenum + 1, true
-  )
-  if ok then
-    if list.length(msg) > 0 then
-      return msg[1]
+---@param bufnr number
+---@param linenum number
+---@return boolean, string?
+function buffer.get_line(bufnr, linenum, strict_indexing)
+  return buffer.get_id(bufnr, {
+    ok = function(buf)
+      local ok, msg = pcall(vim.api.nvim_buf_get_lines, buf, linenum, linenum + 1, strict_indexing)
+      if ok then
+        if #msg == 1 and msg[1] == "" then
+          return true, nil
+        else
+          return true, msg[1]
+        end
+      else
+        return false, msg
+      end
+    end,
+    err = function(msg)
+      return false, msg
     end
-  end
+  })
 end
 
-function buffer.get_linenum(bufnr)
+---@param bufnr number
+---@param start_row number
+---@param end_row number
+---@param strict_indexing? boolean
+---@return boolean, ([]string)?
+function buffer.get_lines(bufnr, start_row, end_row, strict_indexing)
+  return buffer.get_id(bufnr, {
+    ok = function(buf)
+      local ok, msg = pcall(vim.api.nvim_buf_get_lines, buf, start_row, end_row, strict_indexing)
+      if ok then
+        if #msg == 1 and msg[1] == "" then
+          return true, nil
+        else
+          return true, msg
+        end
+      else
+        return false, msg
+      end
+    end,
+    err = function(msg)
+      return false, msg
+    end
+  })
+end
+
+---@param bufnr number
+---@return boolean, number?
+function buffer.get_current_linenum(bufnr)
   return buffer.call(bufnr, function()
     return vim.fn.getpos(".")[2] - 1
   end)
 end
 
-function buffer.current_line(bufnr)
+---@param bufnr number
+---@return boolean, number?
+function buffer.get_current_line(bufnr)
   return buffer.call(bufnr, function()
     return vim.fn.getline('.')
   end)
 end
 
-function buffer.create(name, unlisted)
-  local bufnr = buffer.get(name, true)
-  if unlisted then
-    buffer.set_opt(bufnr, 'buflisted', false)
+---@param bufnr number
+---@return boolean, boolean
+---@return boolean, string?
+function buffer.is_listed(bufnr)
+  local ok, value = buffer.get_opt(bufnr, 'buflisted')
+  if ok then
+    return true, value
   else
-    buffer.set_opt(bufnr, 'buflisted', true)
+    return false, value
   end
-  return bufnr
 end
 
-function buffer.create_unlisted(name)
-  return buffer.get(name, true)
+---@param bufnr number
+---@return boolean, boolean
+---@return boolean, string?
+function buffer.is_unlisted(bufnr)
+  local ok, value = buffer.get_opt(bufnr, 'buflisted')
+  if ok then
+    return true, not value
+  else
+    return false, value
+  end
 end
 
-function buffer.listed(bufnr)
-  return buffer.get_opt(bufnr, 'buflisted') == true
+---@param bufnr number?
+---@return boolean, []string?
+function buffer.list(bufnr)
+  return buffer.get_id(bufnr, {
+    ok = function(buf)
+      return buffer.get_lines(buf, 0, -1, false)
+    end,
+    err = function(msg)
+      return false, msg
+    end,
+  })
 end
 
-function buffer.unlisted(bufnr)
-  return buffer.get_opt(bufnr, 'buflisted') == false
+---@param bufnr number?
+---@param sep? string (default: \\n)
+---@return boolean, string?
+function buffer.string(bufnr, sep)
+  local ok, msg = buffer.list(bufnr)
+  if ok then
+    sep = sep or "\n"
+    return true, table.concat(msg, sep)
+  else
+    return ok, msg
+  end
 end
 
-function buffer.append_lines(bufnr, lines, linenum)
-  if type(lines) == 'string' then lines = vim.split(lines, "\n") end
-  if not linenum then linenum = buffer.line_count(bufnr) else linenum = linenum + 1 end
-  vim.api.nvim_buf_set_lines(bufnr, linenum, linenum, false, lines)
-  return true
+---@class buffer_get_curpos_result
+---@field [1] number
+---@field [2] number
+---@field [3] number
+---@field [4] number
+---@field lnum number
+---@field col number
+---@field off number
+---@field curswant number
+
+---This cannot be used with vim.fn.winrestview!
+---@param bufnr number
+---@return boolean, buffer_get_curpos_result?
+function buffer.get_curpos(bufnr)
+  return buffer.id(bufnr, {
+    ok = function(buf)
+      local ok, msg_or_winid = buffer.get_winid(bufnr)
+      local winid
+
+      if not ok then
+        return false, msg_or_winid
+      else
+        winid = msg_or_winid
+      end
+
+      local out = vim.fn.getcurpos(winid)
+      out[2] = out[2] - 1
+      out.lnum = out[2]
+      out.col = out[3]
+      out.off = out[4]
+      out.curswant = out[5]
+      out.buf = buf
+      out.winid = winid
+
+      return true, out
+    end,
+    err = function(msg)
+      return false, msg
+    end
+  })
 end
 
-function buffer.prepend_lines(bufnr, lines, linenum)
-  if type(lines) == 'string' then lines = vim.split(lines, "\n") end
-  if not linenum then linenum = buffer.line_count(bufnr) - 1 end
-  vim.api.nvim_buf_set_lines(bufnr, linenum, linenum, false, lines)
-  return true
+---@param bufnr number
+---@return boolean, (number|string)?
+function buffer.get_winnr(bufnr)
+  return buffer.id(bufnr, {
+    ok = function(buf)
+      local winnr = vim.fn.bufwinnr(buf)
+      local ok = winnr ~= -1
+
+      if ok then
+        return true, winnr
+      else
+        return false, sprintf("buffer[%d]: Invalid winnr", buf)
+      end
+    end,
+    err = function(msg)
+      return false, msg
+    end
+  })
 end
 
-function buffer.lines(bufnr)
-  return buffer.get_lines(bufnr, 0, -1, false)
+---@param bufnr number
+---@return boolean, (number|string)?
+function buffer.get_winid(bufnr)
+  return buffer.id(bufnr, {
+    ok = function(buf)
+      local winid = vim.fn.bufwinid(buf)
+      local ok = winid ~= -1
+      if ok then
+        return true, winid
+      else
+        return false, sprintf("buffer[%d]: Invalid winid", buf)
+      end
+    end,
+    err = function(msg)
+      return false, msg
+    end
+  })
 end
 
-function buffer.as_string(bufnr)
-  return list.concat(buffer.lines(bufnr), "\n")
+---@return number?
+function buffer.get_current_id()
+  local bufnr = vim.fn.bufnr()
+  if bufnr == -1 then
+    return nil
+  else
+    return bufnr
+  end
 end
 
-function buffer.as_list(bufnr)
-  return buffer.lines(bufnr)
+---@param bufnr number
+---@return boolean, nil|string  (true, nil) or (false, error)
+function buffer.set_current_id(bufnr)
+  local ok, buf = validate_bufnr(bufnr)
+  if not ok then return false, buf end
+  return pcall(vim.api.nvim_set_current_buf, buf)
 end
 
-function buffer.grep(bufnr, ...)
-  local patterns = { ... }
-  local matches = function(s)
+buffer.get_current = buffer.get_current_id
+buffer.set_current = buffer.set_current_id
+
+---@return boolean, (number|string)?
+function buffer.get_current_winid()
+  local exists = buffer.get_current_id()
+  if exists ~= nil then
+    return buffer.get_winid(exists)
+  else
+    return false, "Current buffer is not set"
+  end
+end
+
+---@return boolean, number|string
+function buffer.get_current_winnr()
+  local exists = buffer.get_current_id()
+  if exists ~= nil then
+    return buffer.get_winnr(exists)
+  else
+    return false, "Current buffer is not set"
+  end
+end
+
+---@param bufnr
+---@return boolean, string|number
+function buffer.is_visible(bufnr)
+  return buffer.get_winid(bufnr)
+end
+
+---@param bufnr number
+---@param patterns_or_pred []string|(fun(line: string): boolean)
+---@return boolean, []string
+function buffer.grep(bufnr, patterns_or_pred)
+  local function matches(line)
     for i = 1, #patterns do
-      if s:match(patterns[i]) then
+      if line:match(patterns[i]) then
         return true
       end
     end
-    return false
   end
-  return list.filter(buffer.lines(bufnr), matches)
+
+  return buffer.id(bufnr, {
+    ok = function(buf)
+      local ok, msg = buffer.list(buf)
+      if not ok then
+        return false, msg
+      end
+
+      local lines = msg
+      if type(patterns_or_pred) == 'function' then
+        local res = {}
+        for i = 1, #lines do
+          if patterns_or_pred(lines[i]) then
+            res[#res + 1] = lines[i]
+          end
+        end
+        if #res == 0 then
+          return false, sprintf('buffer[%d]: No lines matched', buf)
+        else
+          return true, res
+        end
+      else
+        local res = list.filter(lines, matches)
+        if #res == 0 then
+          return false, sprintf('buffer[%d]: No lines matched', buf)
+        else
+          return true, res
+        end
+      end
+    end,
+    err = function(msg)
+      return false, msg
+    end
+  })
 end
 
+---@return boolean, buffer_get_curpos_result|string
+function buffer.get_current_curpos()
+  local id = buffer.get_current_id()
+  if defined(id) then
+    return buffer.get_curpos(id)
+  else
+    return false, "No current buffer"
+  end
+end
+
+---@param bufnr number
+---@param lines []string|string
+---@param linenum number
+---@return boolean, string?
+function buffer.append_lines(bufnr, lines, linenum)
+  return buffer.get_id(bufnr, {
+    ok = function(buf)
+      lines = type(lines) == 'string' and vim.split(lines, "\n") or lines
+      linenum = linenum + 1
+      return buffer.set_lines(buf, linenum, linenum, lines)
+    end,
+    err = function(msg)
+      return false, msg
+    end
+  })
+end
+
+---@param bufnr number
+---@param lines []string | string
+---@param linenum number
+---@return boolean, string?
+function buffer.prepend_lines(bufnr, lines, linenum)
+  return buffer.get_id(bufnr, {
+    ok = function(buf)
+      lines = type(lines) == 'string' and vim.split(lines, "\n") or lines
+      return buffer.set_lines(buf, linenum, linenum, lines)
+    end,
+    err = function(msg)
+      return false, msg
+    end
+  })
+end
+
+---@param bufnr number
+---@return boolean, string?
 function buffer.write(bufnr)
-  local filename = buffer.get_name(bufnr)
-  buffer.call(bufnr, function() vim.cmd(':w!') end)
-  return filename
+  return buffer.get_id(bufnr, {
+    ok = function(buf)
+      return buffer.call(buf, function(_buf)
+        vim.cmd(':w!')
+      end)
+    end,
+    err = function(msg)
+      return false, msg
+    end
+  })
 end
 
+---@param bufnr number
+---@return boolean, number|string
 function buffer.wipeout(bufnr)
-  buffer.call(bufnr, function() vim.cmd('bwipeout! %') end)
-  return true
+  return buffer.call(bufnr, function()
+    vim.cmd('bwipeout! %')
+    return bufnr
+  end)
 end
 
-function buffer.visible(bufnr)
-  return buffer.winid(bufnr) ~= -1
-end
-
+---@param bufnr number
+---@param force? boolean
+---@return boolean, number Return deleted winid
 function buffer.hide(bufnr, force)
-  local winid = buffer.winid(bufnr)
-  if winid == -1 then return end
-  vim.api.nvim_win_close(winid, force)
-  return true
+  return buffer.id(bufnr, {
+    ok = function(buf)
+      local ok, winid_or_msg = buffer.get_winid(bufnr)
+      if not ok then
+        return winid_or_msg
+      end
+
+      local winid = winid_or_msg
+      vim.api.nvim_win_close(winid, force)
+      return true, winid
+    end,
+    err = function(msg)
+      return false, msg
+    end
+  })
 end
 
 function buffer.split_current(direction, resize)
@@ -221,9 +1028,9 @@ function buffer.split_right(bufnr, resize)
 end
 
 function buffer.find_next(bufnr, pattern, start_line)
-  bufnr = bufnr or buffer.current()
-  start_line = start_line or buffer.get_linenum(bufnr)
-  local buffer_lc = buffer.line_count(bufnr)
+  bufnr = bufnr or buffer.get_current()
+  start_line = start_line or buffer.get_current_linenum(bufnr)
+  local buffer_lc = buffer.get_line_count(bufnr)
 
   for i = start_line, buffer_lc do
     local line = buffer.get_line(bufnr, i)
@@ -233,23 +1040,24 @@ function buffer.find_next(bufnr, pattern, start_line)
   end
 end
 
-function buffer.create_temp(name, opts)
+function buffer.new_temp(name, opts)
   opts = opts or {}
   name = name or vim.fn.tempname()
   local on_input = opts.on_input
   local contents = opts.contents or opts.text or opts.string
-  local bufnr = buffer.create_unlisted(name)
+  local bufnr = buffer.new(name, { opts = { buflisted = false } })
   local split = opts.split
   local resize = opts.resize
   local write = opts.write
-  local delete_after = ifnil(opts.delete_after, opts.rm_after, nil)
-  local comment = ifelse(on_input, true, opts.comment)
-  contents = contents and ifelse(
-    types.string(contents),
-    vim.split(contents, "\n"),
-    contents
-  )
-  contents = contents and comment and list.map(contents, function(x)
+  local delete_after = opts.delete_after or opts.rm_after
+  local comment = opts.comment
+
+  if on_input then
+    comment = true
+  end
+
+  contents = defined(contents) and types.string(contents) and vim.split(contents, "\n") or contents
+  contents = defined(contents) and comment and list.map(contents, function(x)
     return '# ' .. x
   end) or contents
 
@@ -262,7 +1070,7 @@ function buffer.create_temp(name, opts)
 
   if split then
     vim.keymap.set('n', 'q', '<cmd>bwipeout! %<CR>', { buffer = bufnr })
-    buffer.split(buffer.current(), split, resize)
+    buffer.split(buffer.get_current(), split, resize)
     buffer.set_current(bufnr)
     buffer.call(bufnr, function() vim.cmd 'normal! G' end)
   end
@@ -271,7 +1079,7 @@ function buffer.create_temp(name, opts)
     vim.keymap.set(
       'n', '<C-c><C-c>',
       function()
-        local lines = buffer.lines(bufnr)
+        local lines = buffer.list(bufnr)
         lines = list.filter(lines, function(x)
           if not x:match('^%s*#') then return x end
         end)
@@ -304,59 +1112,29 @@ function buffer.create_temp(name, opts)
   return bufnr
 end
 
-function buffer.open_term(cmd, cwd)
-  local temp_bufnr = buffer.create(nil, false)
-  local job_id, termbufnr
-  local chansend = vim.api.nvim_chan_send
-
-  buffer.call(temp_bufnr, function()
-    vim.cmd('term')
-    termbufnr = buffer.current()
-    job_id = vim.b.terminal_job_id
-    user_config.terminals[job_id] = termbufnr
-    cmd = ifelse(
-      cwd,
-      sprintf('cd "%s" && %s', cwd, cmd),
-      cmd
-    )
-
-    printf(
-      'Started terminal with command: %s',
-      cmd,
-      cwd:gsub(os.getenv('HOME'), '~')
-    )
-
-    chansend(job_id, cmd .. "\n")
-
-    vim.api.nvim_create_autocmd('TermClose', {
-      buffer = termbufnr,
-      desc = 'Delete terminal buffer',
-      callback = function(args) buffer.del(args.buf) end
-    })
-
-    vim.keymap.set(
-      'n', 'q', ':hide<CR>', { buffer = termbufnr }
-    )
-
-    buffer.set_opt(termbufnr, 'buflisted', false)
-  end)
-
-  buffer.del(temp_bufnr)
-
-  return termbufnr, job_id
+function buffer.get_dirname(bufnr)
+  return vim.fs.dirname(buffer.get_name(bufnr))
 end
 
-function buffer:dirname(bufnr)
-  return vim.fs.dirname(buffer.name(bufnr))
-end
-
-function buffer.filetype(bufnr)
+---@param bufnr number
+---@return boolean, string?
+function buffer.get_filetype(bufnr)
   return buffer.get_opt(bufnr, 'filetype')
 end
 
-function buffer.root_dir(bufnr, pat, depth)
+---@param bufnr number
+---@param pat? []string|string (default: {'.git'})
+---@param depth? number (default: 4)
+---@return string?
+function buffer.get_root_dir(bufnr, pat, depth)
   bufnr = bufnr or vim.fn.bufnr()
-  local bufname = buffer.name(bufnr)
+  pat = pat or { '.git' }
+
+  if buffer.is_invalid(bufnr) then
+    return nil
+  end
+
+  local bufname = buffer.get_name(bufnr)
   local ws = vim.fs.find(pat, { upward = true, limit = depth or 4 })
   pat = pat or { '.git' }
   depth = depth or 4
@@ -365,22 +1143,23 @@ function buffer.root_dir(bufnr, pat, depth)
     return vim.fs.dirname(bufname)
   else
     ws = vim.fs.dirname(ws[1])
-    user_config.workspaces[bufnr] = ws
-    user_config.workspaces[bufname] = ws
-    dict.set(user_config.workspaces, { ws, bufnr }, true)
-    dict.set(user_config.workspaces, { ws, bufname }, true)
+    user_config.workspace[bufnr] = ws
+    user_config.workspace[bufname] = ws
+    dict.set(user_config.workspace, { ws, bufnr }, true)
+    dict.set(user_config.workspace, { ws, bufname }, true)
 
     return ws
   end
 end
 
-function buffer.workspace(bufnr, opts)
+----@param bufnr number
+function buffer.get_workspace(bufnr, opts)
   opts = opts or {}
   local pat = opts.pattern or opts.pat or { '.git' }
   local depth = opts.depth or opts.check_depth or 4
   local callback = opts.callback
   bufnr = bufnr or vim.fn.bufnr()
-  local exists = user_config.workspaces[bufnr]
+  local exists = user_config.workspace[bufnr]
 
   if exists and callback then
     return callback(exists)
@@ -388,126 +1167,268 @@ function buffer.workspace(bufnr, opts)
     return exists
   elseif pat then
     if callback then
-      return callback(buffer.root_dir(bufnr, pat, depth))
+      return callback(buffer.get_root_dir(bufnr, pat, depth))
     else
-      return buffer.root_dir(bufnr, pat, depth)
+      return buffer.get_root_dir(bufnr, pat, depth)
     end
   end
 end
 
----@class bufferFindOpts
----@field after? number | boolean
----@field before? number | boolean
----@field below? number | boolean
----@field above? number | boolean
----@field goto? boolean
----@field skip_current_line? boolean (default: true)
+function buffer.open_term(cmd, cwd)
+  cwd = cwd or path.getcwd()
+  local temp_bufnr = buffer.new(nil, { opts = { buflisted = false } })
+  local job_id, termbufnr
+  local chansend = vim.api.nvim_chan_send
 
----Only supports line-based pattern matching. 1-indexed
----@param buf number
----@param pattern string | string[]
----@param opts? bufferFindOpts
----@return number?
-function buffer.find(buf, pattern, opts)
-  buf = buf or buffer.current()
-  return buffer.call(buf, function()
-    local winid = buffer.winid(buf)
-    opts = opts or {}
-    local above = opts.before or opts.above
-    local below = opts.after or opts.below
-    local above_linenum = type(above) == 'number'
-    local below_linenum = type(below) == 'number'
-    local lc = buffer.line_count(buf)
-    local goto_line = opts.goto
-    pattern = type(pattern) ~= 'table' and { pattern } or pattern
-    -- local check_n_lines = opts.n or -1
-    -- local cursor = opts.cursor or 'line' -- supports 'line' or 'l', 'character' or 'c'
+  buffer.call(temp_bufnr, function()
+    vim.cmd('term')
+    buffer.set_opt(bufnr, 'buflisted', false)
+    termbufnr = buffer.get_current_id()
+    job_id = vim.b.terminal_job_id
+    user_config.terminal[job_id] = termbufnr
+    cmd = defined(cwd) and sprintf('cd "%s" && %s', cwd, cmd) or cmd
 
-    if above_linenum and (above > lc or above < 1) then
-      return
-    end
+    printf(
+      'Started terminal with command `%s` @ buffer %d',
+      cmd,
+      cwd:gsub(os.getenv('HOME'), '~'),
+      termbufnr
+    )
 
-    if below_linenum and (below > lc or below < 1) then
-      return
-    end
+    chansend(job_id, cmd .. "\n")
 
-    if goto_line then
-      local pos = vim.fn.getcurpos(winid)[2]
-      if above and above_linenum then
-        above = above - 1
-      elseif above then
-        above = pos  - 1
-      end
+    vim.api.nvim_create_autocmd('TermClose', {
+      buffer = termbufnr,
+      desc = 'Delete terminal buffer',
+      callback = function(args) buffer.rm(args.buf) end,
+      once = true,
+    })
 
-      if below and below_linenum then
-        below = below + 1
-      else
-        below = pos + 1
-      end
-    end
+    vim.keymap.set('n', 'q', ':call HideWindowIfPossible()<CR>', { buffer = termbufnr })
+    vim.keymap.set('n', 'Q', ':call WipeoutWindowIfPossible()<CR>', { buffer = termbufnr })
 
-    local function normal_goto_line(linenum)
-      if goto_line then
-        vim.cmd(sprintf('normal! %dG', linenum))
-      end
-    end
-
-    local function get_line(linenum)
-      return buffer.get_lines(0, linenum - 1, linenum, false)[1]
-    end
-
-    local function matches(linenum, line)
-      for _, p in ipairs(pattern) do
-        if string.match(line, p) then
-          normal_goto_line(linenum)
-          return linenum
-        end
-      end
-    end
-
-    local function match_within_lines(start_line, end_line, direction)
-      for linenum = start_line, end_line, direction do
-        local found = matches(linenum, get_line(linenum))
-        if found then
-          return found
-        end
-      end
-    end
-
-    if above then
-      return match_within_lines(above, 1, -1)
-    else
-      return match_within_lines(below, lc, 1)
-    end
+    buffer.set_opt(termbufnr, 'buflisted', false)
   end)
+
+  buffer.rm(temp_bufnr)
+
+  return termbufnr, job_id
 end
 
----@param buf number
----@param linenum boolean | number
----@param pattern string | string[]
----@param opts? bufferFindOpts
----@return number?
-function buffer.find_below(buf, linenum, pattern, opts)
-  opts = opts or {}
-  opts = vim.deepcopy(opts)
-  opts.below = linenum
-  opts.above = nil
+buffer.terminal = buffer.open_term
 
-  return buffer.find(buf, pattern, opts)
+---@class buffer_find_below_opts
+---@field all? boolean (default: false)
+---@field times? number (default: 1)
+---@field jump? boolean
+---@field strict? boolean
+
+---@class buffer_find_return
+---@field [1] number
+---@field [2] string
+
+---@param bufnr number
+---@param start_row? number (default: <current linenum>)
+---@param patterns []string|string|(fun(line): boolean)
+---@param opts buffer_find_below_opts
+---@return boolean, buffer_find_return|string?
+function buffer.find_below(bufnr, start_row, patterns, opts)
+  local _
+  local ok, msg = validate_bufnr(bufnr)
+
+  if not ok then
+    return false, msg
+  end
+
+  opts = opts or {}
+  local times = opts.times
+  local jump = opts.jump
+  local findall = opts.all
+  local strict = opts.strict
+
+  if times <= 0 then
+    return false, buf_msg("No matches found")
+  elseif (times > 1 or findall) and jump then
+    err_buf_msg(bufnr, 'opts.times should be above 1, got %d', times)
+  end
+
+  local is_pred = type(patterns) == 'function'
+  patterns = not is_pred and type(patterns) == 'string' and { patterns } or patterns
+  local function matches(line)
+    if is_pred then
+      return patterns(line)
+    end
+
+    for i = 1, #patterns do
+      if line:match(patterns[i]) then
+        return true
+      end
+    end
+  end
+
+  local lc = vim.api.nvim_buf_line_count(bufnr)
+  local lc0 = lc - 1
+
+  if lc == 0 then
+    return false, buf_msg(bufnr, "Empty buffer")
+  end
+
+  _, msg = buffer.get_current_linenum(bufnr)
+  start_row = msg
+  start_row = start_row < 0 and start_row + lc or start_row
+  start_row = start_row + 1
+
+  if start_row >= lc0 or start_row < 0 then
+    if strict then
+      return false, buf_msg(bufnr, 'start_row: 0 <= linenum < %d', lc)
+    elseif start_row >= lc0 then
+      start_row = lc0
+    elseif start_row < 0 then
+      start_row = 0
+    end
+  end
+
+  if start_row == lc0 then
+    return false, buf_msg(bufnr, "No matches found")
+  end
+
+  local results = {}
+  local results_len = 0
+
+  for i = start_row, lc0, 1 do
+    if times == results_len then
+      if jump then nvim_cmd('normal! %dG', i + 1) end
+      return true, results
+    end
+
+    local linenum = i
+    local _, line = buffer.get_line(bufnr, linenum)
+
+    if line and matches(line) then
+      results[results_len + 1] = { linenum, line }
+      results_len = results_len + 1
+    end
+  end
+
+  if results_len == 0 then
+    return false, buf_msg(bufnr, "No matches found")
+  end
+
+  if jump then
+    nvim_cmd('normal! %dG', results[1][1])
+  end
+
+  return true, results
 end
 
----@param buf number
----@param linenum boolean | number
+---@class buffer_find_above_opts
+---@field all? boolean (default: false)
+---@field times? number (default: 1)
+---@field jump? boolean
+---@field strict? boolean
+
+---@param bufnr number
+---@param start_row? number (default: <current linenum>)
+---@param patterns []string|string|(fun(line): boolean)
+---@param opts buffer_find_above_opts
+---@return boolean, buffer_find_return|string?
+function buffer.find_above(bufnr, start_row, patterns, opts)
+  local _
+  local ok, msg = validate_bufnr(bufnr)
+
+  if not ok then
+    return false, msg
+  end
+
+  opts = opts or {}
+  local times = opts.times or 1
+  local jump = opts.jump
+  local findall = opts.all
+  local strict = opts.strict
+
+  if times <= 0 then
+    return false, buf_msg("No matches found")
+  elseif (times > 1 or findall) and jump then
+    err_buf_msg(bufnr, 'opts.times should be above 1, got %d', times)
+  end
+
+  local is_pred = type(patterns) == 'function'
+  patterns = not is_pred and type(patterns) == 'string' and { patterns } or patterns
+  local function matches(line)
+    if is_pred then
+      return patterns(line)
+    end
+
+    for i = 1, #patterns do
+      if line:match(patterns[i]) then
+        return true
+      end
+    end
+  end
+
+  local lc = vim.api.nvim_buf_line_count(bufnr)
+  local lc0 = lc - 1
+
+  if lc == 0 then
+    return false, buf_msg(bufnr, "Empty buffer")
+  end
+
+  _, msg = buffer.get_current_linenum(bufnr)
+  start_row = msg
+  start_row = start_row < 0 and start_row + lc or start_row
+  start_row = start_row + 1
+
+  if start_row >= lc0 or start_row < 0 then
+    if strict then
+      return false, buf_msg(bufnr, 'start_row: 0 <= linenum < %d', lc)
+    elseif start_row >= lc0 then
+      start_row = lc0
+    elseif start_row < 0 then
+      start_row = 0
+    end
+  end
+
+  if start_row == lc0 then
+    return false, buf_msg(bufnr, "No matches found")
+  end
+
+  local results = {}
+  local results_len = 0
+
+  for i = lc0, start_row, -1 do
+    if times == results_len then
+      if jump then nvim_cmd('normal! %dG', i + 1) end
+      return true, results
+    end
+
+    local linenum = i
+    local _, line = buffer.get_line(bufnr, linenum)
+
+    if line and matches(line) then
+      results[results_len + 1] = { linenum, line }
+      results_len = results_len + 1
+    end
+  end
+
+  if results_len == 0 then return false, buf_msg(bufnr, "No matches found") end
+  if jump then nvim_cmd('normal! %dG', results[1][1]) end
+
+  return true, results
+end
+
+---@class buffer_find_opts
+---@field after? number|boolean
+---@field below? number|boolean
+---@field before? number|boolean
+---@field above? number|boolean
+---@field jump? boolean
+---@field strict? boolean
+
+---@param bufnr number
 ---@param pattern string | string[]
 ---@param opts? bufferFindOpts
----@return number?
-function buffer.find_above(buf, linenum, pattern, opts)
-  opts = opts or {}
-  opts = vim.deepcopy(opts)
-  opts.above = linenum
-  opts.below = nil
-
-  return buffer.find(buf, pattern, opts)
+---@return boolean, number?
+function buffer.find(bufnr, start_row, pattern, opts)
 end
 
 ---@param buf number
@@ -536,7 +1457,6 @@ function buffer.find_above_cursor(buf, pattern, opts)
   return buffer.find(buf, pattern, opts)
 end
 
-
 ---@param buf number
 ---@param linenum boolean | number
 ---@param pattern string | string[]
@@ -547,7 +1467,7 @@ function buffer.find_below_and_goto(buf, linenum, pattern, opts)
   opts = vim.deepcopy(opts)
   opts.below = linenum
   opts.above = nil
-  opts.goto = true
+  opts.jump = true
 
   return buffer.find(buf, pattern, opts)
 end
@@ -562,7 +1482,7 @@ function buffer.find_above_and_goto(buf, linenum, pattern, opts)
   opts = vim.deepcopy(opts)
   opts.above = linenum
   opts.below = nil
-  opts.goto = true
+  opts.jump = true
 
   return buffer.find(buf, pattern, opts)
 end
@@ -576,7 +1496,7 @@ function buffer.find_below_cursor_and_goto(buf, pattern, opts)
   opts = vim.deepcopy(opts)
   opts.below = true
   opts.after = nil
-  opts.goto = true
+  opts.jump = true
 
   return buffer.find(buf, pattern, opts)
 end
@@ -590,15 +1510,120 @@ function buffer.find_above_cursor_and_goto(buf, pattern, opts)
   opts = vim.deepcopy(opts)
   opts.above = true
   opts.below = nil
-  opts.goto = true
+  opts.jump = true
 
   return buffer.find(buf, pattern, opts)
 end
 
--- \section{1}
---
--- \section{2}
---
--- \section{3}
+function buffer.if_valid_winnr(bufnr, opts)
+  opts = opts or {}
+  local ok = opts.ok or function(args) return args end
+  local err_buf = opts.err_buf or function(...) end
+  local err_winnr = opts.err_winnr or function(...) end
+
+  bufnr = buffer.id(bufnr)
+  if undefined(bufnr) then
+    return err_buf { buf = bufnr }
+  end
+
+  local winnr = vim.fn.bufwinnr(bufnr)
+  if winnr ~= -1 then
+    return ok { buf = bufnr, winnr = winnr }
+  else
+    return err_winnr { buf = bufnr }
+  end
+end
+
+function buffer.if_valid_winid(bufnr, opts)
+  opts = opts or {}
+  local ok = opts.ok or function(args) return args end
+  local err_buf = opts.err_buf or function(_args) end
+  local err_winid = opts.err_winid or function(_args) end
+
+  bufnr = buffer.id(bufnr)
+  if undefined(bufnr) then
+    return err_buf {}
+  end
+
+  local winid = vim.fn.bufwinid(bufnr)
+  if winid ~= -1 then
+    return ok { buf = bufnr, winid = winid }
+  else
+    return err_winid { buf = bufnr }
+  end
+end
+
+---Get dirname of buffer/path
+---@param buf number|string? (default: 0)
+---@return string?
+function dirname(buf)
+  if type(buf) == 'string' then
+    return path.dirname(buf)
+  else
+    return buffer.get_id(buf, {
+      ok = function(bufnr)
+        return path.dirname(buffer.get_name(bufnr))
+      end,
+      err = function(_msg)
+        return nil
+      end
+    })
+  end
+end
+
+buffer.get_dirname = dirname
+
+-- Remove these shitty aliases
+buffer.filetype = buffer.get_filetype
+buffer.name = buffer.get_name
+buffer.workspace = buffer.get_workspace
+buffer.word_count = buffer.get_word_count
+buffer.root_dir = buffer.get_root_dir
+buffer.current_line = buffer.get_current_line
+buffer.winid = buffer.get_winid
+buffer.winnr = buffer.get_winnr
+buffer.dirname = buffer.get_dirname
+buffer.lines = buffer.get_lines
+buffer.text = buffer.get_text
+buffer.opt = buffer.get_opt
+buffer.var = buffer.get_var
+buffer.dirname = dirname
+
+
+--- Fix these shitheads
+local TODO = {
+  'find family of functions',
+}
+
+local MISSING = {
+  'del_keymap', 'set_keymap', 'get_keymap',
+  'set_current',
+}
+
+buffer.returns[1].exists = buffer.exists
+buffer.returns[1].defined = buffer.defined
+buffer.returns[1].undefined = buffer.undefined
+buffer.returns[1].is_loaded = buffer.is_loaded
+buffer.returns[1].is_valid = buffer.is_valid
+buffer.returns[1].is_invalid = buffer.is_invalid
+
+buffer.returns[2].list = buffer.list
+buffer.returns[2].string = buffer.string
+buffer.returns[2].grep = buffer.grep
+buffer.returns[2].append_lines = buffer.append_lines
+buffer.returns[2].prepend_lines = buffer.prepend_lines
+buffer.returns[2].set_lines = buffer.set_lines
+buffer.returns[2].set_opt = buffer.set_opt
+buffer.returns[2].get_opt = buffer.get_opt
+buffer.returns[2].get_line = buffer.get_line
+buffer.returns[2].get_lines = buffer.get_lines
+buffer.returns[2].get_curpos = buffer.get_curpos
+buffer.returns[2].is_listed = buffer.is_listed
+buffer.returns[2].is_unlisted = buffer.is_unlisted
+buffer.returns[2].is_visible = buffer.is_visible
+buffer.returns[2].get_opts = buffer.get_opts
+buffer.returns[2].get_vars = buffer.get_vars
+buffer.returns[2].set_opts = buffer.set_opts
+buffer.returns[2].set_vars = buffer.set_vars
 
 return buffer

@@ -1,13 +1,56 @@
-local utils = require 'lua-utils'
-local types = utils.types
-local dict = utils.dict
-local list = utils.list
-local validate = utils.validate
-local class = utils.class
-local augroup = require 'nvim-utils.augroup'
-local buffer = require 'nvim-utils.buffer'
-local buffer_group = require 'nvim-utils.buffer_group'
-local keymap = require 'nvim-utils.keymap'
+require 'nvim-utils.state'
+
+local types = require 'lua-utils.types'
+local dict = require 'lua-utils.dict'
+local list = require 'lua-utils.list'
+
+local path_utils = require 'lua-utils.path_utils'
+local validate = require 'lua-utils.validate'
+local class = require 'lua-utils.class'
+
+require 'nvim-utils.augroup'
+require 'nvim-utils.buffer'
+require 'nvim-utils.buffer_group'
+require 'nvim-utils.keymap'
+require 'nvim-utils.autocmd'
+
+---@class filetype
+---@field keymaps? filetypeKeymaps
+---@field autocmds? filetypeAutocmds
+---@field root? filetypeRoot
+---@field buffer? filetypeBuffer
+---@field lsp? table<string,table>
+---@field shell_command? string (default: bash)
+filetype = class('filetype')
+
+---Validator for filetype specification
+filetype.validator = {
+  opt_keymaps = { keymap_config, 'table' },
+  opt_autocmds = { autocmd_config, 'table' },
+  opt_repl = {
+    repl_config, {
+      command = 'string',
+      opt_input = {
+        opt_use_file = 'boolean',
+        opt_file_string = 'string',
+        opt_apply = 'function',
+      }
+    }
+  },
+  opt_buffer = {
+    buffer_config,
+    { opt_vars = 'table', opt_opts = 'table' }
+  },
+  opt_lsp = { lsp_config, 'table' },
+  opt_root = {
+    root_config,
+    {
+      opt_pattern = types.union('string', 'table'),
+      opt_check_depth = 'number'
+    }
+  }
+}
+user_config.filetype = user_config.filetype or {}
 
 --- Valid options
 -- {
@@ -33,247 +76,306 @@ local keymap = require 'nvim-utils.keymap'
 --   }
 -- }
 
-local filetype = class 'Filetype'
+---@class filetypeKeymap
+---@field [1] string|[]string
+---@field [2] string
+---@field [3] function|string
+---@field [4]? table
 
-local function update_lsp_config(opts)
-  local root_merged = false
-  local merge_root_config = function(config)
-    if config.root_markers then
-      dict.set(opts, { 'root', 'pattern' }, config.root_markers, true)
-    end
-  end
-  local merge_config = function(name, lsp_opts)
-    local ok, config = pcall(require, 'nvim-lspconfig.lsp.' .. name)
-    if ok then
-      if not root_merged then
-        merge_root_config(config)
-        root_merged = true
-      end
-      dict.merge(lsp_opts, config)
-    end
-  end
-  local spec = opts.lsp
+---@alias filetypeKeymaps table<string|number,filetypeKeymap>
 
-  if not spec or dict.size(spec) == 0 then
-    return
-  end
+---@class filetypeAutocmd
+---@field [1]? function|[]function
+---@field opts? table
 
-  if type(spec[1]) == 'table' then
-    validate.server(spec, types.table)
-    for _, server in ipairs(spec) do
-      merge_config(server[1], server)
-    end
-  else
-    validate.server(spec[1], 'string')
-  end
-end
+---@alias filetypeAutocmds table<string|number,filetypeAutocmd>
 
-function filetype:initialize(opts)
-  if types.string(opts) then
-    opts = require('config.filetypes.' .. opts)
-  end
+---@class filetypeBuffer
+---@field vars? table<string,any>,
+---@field opts? table<string,any>
 
-  validate.opts(opts, {
-    name = types.string,
-    opt_keymaps = types.dict,
-    opt_autocmds = types.dict,
-    opt_buffer = {
-      opt_vars = types.dict,
-      opt_opts = types.dict
-    },
-    opt_root = {
-      opt_pattern = types.list,
-      opt_check_depth = types.number
-    },
-    opt_lsp = types.table,
-    opt_repl = {
-      command = types.string,
-      opt_input = {
-        opt_use_file = types.boolean,
-        opt_file_string = types.string,
-        opt_apply = types.fun
-      }
-    }
-  })
+---@class filetypeRoot
+---@field pattern string|[]string
+---@field check_depth? number (default: 4)
 
-  update_lsp_config(opts)
-  dict.merge(self, opts)
+function filetype:initialize(ft, config)
+  self.name = ft
+  self.keymap = {}
+  self.autocmd = {}
+  self.augroup = augroup.set('user_config.filetype.' .. self.name, true, {})
 
-  if self.lsp and dict.size(self.lsp) > 0 then
-    if type(opts.lsp[1]) == 'string' then
-      validate.server(opts.lsp[1], 'string')
-    else
-      for _, spec in ipairs(opts.lsp) do
-        validate.server(spec[1], 'string')
-      end
-    end
-  end
-
-  self.require_path = 'config.filetypes.' .. self.name
-  self.augroup = augroup('user_config.filetype.' .. self.name)
-  self.loaded = false
-
+  dict.mergef(self, config)
   dict.set_unless(self, { 'root', 'pattern' }, { '.git' }, true)
   dict.set_unless(self, { 'root', 'check_depth' }, 4)
-  self:setup()
+  dict.set_unless(self, { 'root', 'buffer_group' }, {})
 
-  dict.set_unless(self, { 'root', 'buffer_groups' }, {})
-  user_config.filetypes[self.name] = self
+  user_config.filetype[self.name] = self
 end
 
-function filetype:get_lsp_config()
-  local config = self.lsp
-  if not config or dict.size(config) == 0 then
+function filetype:has_lsp()
+  return self.lsp ~= nil
+end
+
+function filetype:fix_lsp()
+  if self.lsp == nil or size(self.lsp) == 0 then
     return
   end
 
-  config = vim.deepcopy(config)
-  if type(config[1]) == 'string' then
-    local server = table.remove(config, 1)
-    return { { server, config } }
-  else
-    local out = {}
-    for _, spec in ipairs(self.lsp) do
-      local server = spec[1]
-      table.remove(spec, 1)
-      local server_config = spec
-      out[#out + 1] = { server, server_config }
+  if type(self.lsp) == 'string' then
+    self.lsp = {[self.lsp] = {}}
+  elseif types.pure_list(self.lsp) then
+    local lsp = self.lsp
+    self.lsp = {}
+
+    for i=1, #lsp do
+      self.lsp[lsp[i]] = {}
     end
 
-    return out
+    return self:fix_lsp()
+  else
+    assert(types.pure_dict(self.lsp))
   end
 end
 
-function filetype:has_lsp_config()
-  return types.table(self.lsp)
+---@param self filetype
+---@param key string
+---@return string
+local function make_name(self, key)
+  return sprintf('filetype.%s.%s', self.name, key)
 end
 
-function filetype:require()
-  return require(self.require_path)
+function filetype:set_keymap(name, modes, lhs, rhs, opts)
+  opts = opts or {}
+  opts = vim.deepcopy(opts)
+  opts.name = sprintf('filetype.%s.%s', self.name, name)
+  opts.event = 'filetype'
+  opts.pattern = self.name
+  local kbd = keymap.set(modes, lhs, rhs, opts)
+  self.keymap[name] = kbd
+
+  return kbd
 end
 
-function filetype:set_autocmds()
-  if not self.autocmds then
-    return
-  end
+---@param name string
+---@param event string|string[]
+---@param callback function|string
+---@param opts autocmdOpts
+function filetype:set_autocmd(name, callback, opts)
+  opts = opts or {}
+  opts = vim.deepcopy(opts)
+  opts.name = make_name(self, name)
+  opts.pattern = self.name
+  self.augroup:append('filetype', callback, opts)
 
-  for name, callback in pairs(self.autocmds) do
-    local opts = { name = name, desc = name }
-    self.augroup:add_autocmd('FileType', self.name, callback, opts)
-  end
-
-  return true
+  return au
 end
 
-function filetype:set_keymaps()
-  if self.keymaps then
-    self:add_keymaps(self.keymaps)
-    return true
+function filetype:set_keymaps(specs)
+  self.keymap = self.keymap or {}
+  specs = dict.merge(vim.deepcopy(specs or {}), self.keymap)
+
+  for name, specs in pairs(self.keymap) do
+    self:set_keymap(name, unpack(specs))
   end
+end
+
+
+---@class filetypeAutocmdSpec
+---@field [1] string|function
+---@field [2]? autocmdOpts
+
+---@param specs table<string,filetypeAutocmdSpec|function>
+---@return table<string,autocmd>?
+function filetype:set_autocmds(specs)
+  self.autocmd = self.autocmd or {}
+  specs = dict.merge(vim.deepcopy(specs or {}), self.autocmd)
+
+  local res = {}
+  for key, value in pairs(specs) do
+    local name = make_name(self, key)
+    if callable(value) then
+      res[key] = autocmd.set('filetype', value, {pattern = self.name, desc = name, name = name})
+    elseif type(value) == 'string' then
+      res[key] = autocmd.set('filetype', value, {pattern = self.name, desc = name, name = name})
+    else
+      local callback, opts = unpack(value)
+      opts = vim.deepcopy(opts or {})
+      opts.name = make_name(self, key)
+      opts.pattern = self.name
+      res[key] = autocmd.set('filetype', callback, opts)
+    end
+  end
+
+  return res
 end
 
 function filetype:set_buf_vars()
-  self.augroup:add_autocmd('FileType', self.name, function()
-    if self.buffer and self.buffer.vars then
-      local curbuf = buffer.current()
-      for key, value in pairs(self.buffer.vars) do
-        buffer.set_var(curbuf, key, value)
-      end
-    end
-  end, { name = 'buffer.variables' })
+  if self.buffer and self.buffer.vars then
+    self:set_autocmd('buffer_vars', function()
+        local curbuf = buffer.get_current_id()
+        for key, value in pairs(self.buffer.vars) do
+          buffer.set_var(curbuf, key, value)
+        end
+      end)
+  end
 end
 
 function filetype:set_buf_opts()
-  self.augroup:add_autocmd('FileType', self.name, function()
-    if self.buffer and self.buffer.opts then
-      local curbuf = buffer.current()
-      for key, value in pairs(self.buffer.opts) do
-        buffer.set_opt(curbuf, key, value)
-      end
-    end
-  end, { name = 'buffer.options' })
-end
-
-function filetype:add_autocmd(callback, opts)
-  opts = opts or {}
-  validate.opts(opts, 'table')
-
-  opts = vim.deepcopy(opts)
-  opts.pattern = self.name
-
-  self.augroup:add_autocmd('FileType', self.name, callback, opts)
-end
-
-function filetype:add_keymap(mode, lhs, rhs, opts)
-  return keymap.set(mode, lhs, rhs, opts)
-end
-
-function filetype:add_keymaps(specs)
-  for name, spec in pairs(specs) do
-    local mode, lhs, rhs, opts = unpack(spec)
-    opts = opts or {}
-    opts = vim.deepcopy(opts)
-    opts.desc = opts.desc or name
-    opts.name = name
-    opts.filetype = self.name
-    self:add_keymap(mode, lhs, rhs, opts)
+  if self.buffer and self.buffer.opts then
+    self:set_autocmd('buffer_opts', function()
+        local curbuf = buffer.get_current_id()
+        for key, value in pairs(self.buffer.opts) do
+          buffer.set_opt(curbuf, key, value)
+        end
+      end)
   end
 end
 
-function filetype:delete_autocmd(name_or_id)
-  self.augroup:delete_autocmd(name_or_id)
+function filetype:query(ks)
+  ks = type(ks) ~= 'table' and {ks} or ks
+  return dict.get(self, ks)
 end
 
-filetype.del_autocmd = filetype.delete_autocmd
-
-function filetype:query(...)
-  return dict.get(self, { ... })
-end
-
-function filetype:root_dir(bufnr)
-  local bufname = buffer.name(bufnr)
-  local ft = buffer.filetype(bufnr)
+function filetype:fix_root()
   local root_opts = self.root or {
     pattern = { '.git' },
-    check_depth = 4
+    check_depth = 4 
   }
 
-  if not ft:match('[a-zA-Z0-9]') then
-    return false
-  elseif not bufname:match('[a-zA-Z0-9]') then
-    return false
+  if type(root_opts) == 'string' then
+    root_opts = {pattern = root_opts}
+  elseif type(root_opts) == 'number' then
+    root_opts = {pattern = {'.git'}, check_depth = root_opts}
+  elseif type(root_opts.pattern) == 'string' then
+    root_opts.pattern = {root_opts.pattern}
   end
 
-  local bgs = self.root.buffer_groups
-  local ws = buffer.workspace(bufnr, root_opts)
+  self.root = root_opts
+  return self.root
+end
+
+---@param bufnr number
+---@param pat? []string|string (default: {'.git'})
+---@param depth? number (default: 4)
+---@return string?
+function filetype:get_root_dir(bufnr, pat, depth)
+  local ok, msg = buffer.is_valid(bufnr)
+  if not ok then
+    return false, msg
+  end
+
+  local ft
+  ok, msg = buffer.get_filetype(bufnr)
+
+  if not ok then
+    return false, sprintf('buffer[%d]: Expected filetype as %s, got %s', bufnr, self.name, msg)
+  else
+    ft = msg
+    if #ft == 0 then
+      return false, sprintf('buffer[%d]: Has empty filetype. Expected filetype %s', bufnr, self.name)
+    end
+  end
+
+  local bufname = buffer.get_name(bufnr)
+  local bgs = self.root.buffer_group
+  local ws = buffer.get_root_dir(bufnr, root_opts.pattern, root_opts.check_depth)
 
   if not bgs[ws] then
     bgs[ws] = buffer_group(ws, ws)
   end
+
+  return ws
 end
 
-function filetype:setup()
-  self:set_buf_vars()
-  self:set_buf_opts()
-  self:set_autocmds()
-  self:set_keymaps()
-  self.loaded = true
+---@return filetype 
+function filetype:require()
+  local config = require('config.filetype.' .. self.name)
+  dict.mergef(self, config)
+  -- self:update()
+
   return self
 end
 
--- Used for project files who do not have a ftconfig
-if not user_config.filetypes.shell then
-  user_config.filetypes.shell = filetype {
-    name = 'shell',
-    root = { pattern = { '.git' }, check_depth = 4 },
-    repl = { command = user_config.shell_command or 'bash' }
-  }
+function filetype:setup(force)
+  if force or not self.loaded then
+    self:require()
+    self:fix_lsp()
+    self:fix_root()
+    self:set_buf_vars()
+    self:set_buf_opts()
+    self:set_autocmds()
+    self:set_keymaps()
+    self.loaded = true
+  end
+
+  return self
 end
 
-function filetype.buf_get(buf)
-  buf = buf or vim.fn.bufnr()
-  local ft = buffer.filetype(buf)
-  return user_config.filetypes[ft]
+---Other class methods and static methods
+filetype.utils = {}
+local utils = filetype.utils
+
+---@param ... []string|string|number
+---@return any
+function utils.get(...)
+  local ks = list.flatten {...}
+  return dict.get(user_config.filetype, ks)
+end
+
+---@param bufnr? number
+---@param ... []string|string|number
+---@return any
+function utils.buffer_get(bufnr, ...)
+  bufnr = bufnr or vim.fn.bufnr()
+  local ks = list.flatten({bufnr}, {...})
+
+  return buffer.get_id(bufnr, {
+    ok = function (buf)
+      return utils.get(buf, ks)
+    end,
+    err = function (msg)
+      return msg
+    end
+  })
+end
+
+---@param ft string
+---@return filetype?
+function utils.exists(ft)
+  return user_config.filetype[ft]
+end
+
+---@return []string
+function utils.list_builtin()
+  local ft_path = user_config.path.dir.filetype
+  local ft_paths = path_utils.glob(ft_path .. '/*.lua')
+  local res = {}
+
+  for _, path in ipairs(ft_paths) do
+    local ft = path_utils.basename(path):gsub('%.lua$', '')
+    res[#res+1] = ft
+  end
+
+  return res
+end
+
+---@return table<string,filetype>
+function utils.setup_builtin()
+  local res = {}
+
+  for _, ft in ipairs(utils.list_builtin()) do
+    local x = filetype(ft)
+    x:setup()
+    res[x.name] = x
+  end
+
+  return res
+end
+
+--- Used for project files who do not have a ftconfig
+if not user_config.filetype.shell then
+  ---@type filetype
+  user_config.filetype.sh = filetype('sh'):setup()
 end
 
 return filetype

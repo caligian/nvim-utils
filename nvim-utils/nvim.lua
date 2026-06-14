@@ -2,9 +2,10 @@ local utils = require('lua-utils')
 local list = utils.list
 local types = utils.types
 local validate = utils.validate
-local nvim = {}
 
-function nvim.termcode(s)
+nvim = {}
+
+function nvim.replace_termcodes(s)
   return vim.api.nvim_replace_termcodes(s, true, false, true)
 end
 
@@ -13,39 +14,15 @@ end
 ---@return boolean, string?
 function nvim.normal(...)
   for _, cmd in ipairs({ ... }) do
-    local ok, _ = pcall(vim.cmd, 'normal! ' .. nvim.termcode(cmd))
-    if not ok then return false end
-  end
-
-  return true
-end
-
----Run ex string (command prefixed with ':')
----@param ... string
----@return boolean, string?
-function nvim.ex(...)
-  for _, cmd in ipairs({ ... }) do
-    local ok, _ = pcall(vim.cmd, ': ' .. cmd)
-    if not ok then return false, cmd end
-  end
-
-  return true, nil
-end
-
----Run vim command with ex
----@param ... string
----@return boolean, string?
-function nvim.cmd(...)
-  for _, cmd in ipairs({ ... }) do
-    local ok, _ = pcall(vim.cmd, cmd)
-    if not ok then return false, cmd end
+    local ok, msg = pcall(vim.cmd, 'normal! ' .. nvim.termcode(cmd))
+    if not ok then return false, msg end
   end
 
   return true, nil
 end
 
 function nvim.noh()
-  nvim.cmd 'noh'
+  vim.cmd ':noh'
 end
 
 function nvim.next_search()
@@ -57,7 +34,7 @@ function nvim.prev_search()
 end
 
 function nvim.region(as_list)
-  as_list = ifnil(as_list, false)
+  as_list = when_nil(as_list, L(false))
   local esc = vim.api.nvim_replace_termcodes("<esc>", true, false, true)
   vim.api.nvim_feedkeys(esc, "x", false)
   local vstart = vim.fn.getpos("'<")
@@ -72,6 +49,8 @@ function nvim.region(as_list)
     end
   end
 end
+
+--- Add the above to buffer API
 
 function nvim.mode()
   return vim.fn.mode()
@@ -126,7 +105,7 @@ function nvim.require2path(require_string, dir)
   validate.require_string(require_string, 'string')
   validate.opt_runtimepath(dir, 'string')
 
-  dir = ifnil(dir, vim.fn.stdpath('config')) .. '/lua'
+  dir = when_nil(dir, partial(false, vim.fn.stdpath, 'config')) .. '/lua'
   require_string = vim.split(require_string, '[.]')
   local path = list.join(list(dir, require_string), '/')
 
@@ -181,7 +160,7 @@ function nvim.require(require_path, callback)
   end
 
   if mod then
-    return ifelse(callback, callback(mod), mod)
+    return defined(callback) and callback(mod) or mod
   else
     return false
   end
@@ -208,6 +187,32 @@ function nvim.select(choices, prompt, on_choice, formatter)
     { prompt = prompt, format_item = formatter },
     on_choice
   )
+end
+
+
+---@param str_or_fmt string
+---@param ... string
+---@return boolean, any
+function nvim.exec(str_or_fmt, ...)
+  return pcall(vim.nvim_exec, string.format(str_or_fmt, ...))
+end
+
+---@param str_or_fmt string
+---@param ... string
+---@return boolean, string?
+function nvim.cmd(str_or_fmt, ...)
+  return pcall(vim.cmd, string.format(str_or_fmt, ...))
+end
+
+---@param linenum number
+---@return boolean, string?
+function nvim.goto_linenum(linenum)
+  local ok, msg = nvim.cmd('normal! %dG', linenum)
+  if ok then
+    return true, nil
+  else
+    return false, msg
+  end
 end
 
 return nvim
