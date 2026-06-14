@@ -216,7 +216,8 @@ local function open_term(self)
       errorf("Could not start terminal with cmd `%s' in directory %s", self.cmd, self.cwd)
     else
       if in_nix_shell then
-        if not cmd:match('/?(bash|zsh|csh|sh|fish|tcsh)$') then
+        local check = basename(cmd)
+        if not check:match('^(bash|zsh|csh|sh|fish|tcsh)$') then
           chansend(job_id, cmd .. "\r")
         end
       end
@@ -240,6 +241,7 @@ function terminal:start()
   local ok, msg = open_term(self)
 
   if not ok then
+    error(msg)
     return false, msg
   end
 

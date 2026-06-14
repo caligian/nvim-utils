@@ -372,10 +372,5 @@ function utils.setup_builtin()
   return res
 end
 
---- Used for project files who do not have a ftconfig
-if not user_config.filetype.shell then
-  ---@type filetype
-  user_config.filetype.sh = filetype('sh'):setup()
-end
 
 return filetype

@@ -135,19 +135,9 @@ function repl.create(bufnr, shell)
   return repl(ws, opts)
 end
 
-function repl.start_shell()
-  if not user_config.repl.sh then
-    user_config.repl.sh = terminal(
-      user_config.shell_command,
-      os.getenv('HOME')
-    )
-  end
-  local term = user_config.repl.sh
-  if not term then
-    return false
-  else
-    term:start()
-  end
-end
+user_config.repl.sh = user_config.repl.sh or repl(os.getenv("HOME"), {
+  cmd = vim.env.shell,
+  filetype = 'sh'
+})
 
 return repl
