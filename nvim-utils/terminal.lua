@@ -15,6 +15,10 @@ require('nvim-utils.nvim')
 ---@field buffer? number
 terminal = class 'terminal'
 
+--- Since we are using nix-shell in some places, skip running the shell interpreter
+---@type table<string,boolean>
+terminal.valid_shell = { zsh = true, bash = true, csh = true, sh = true, tcsh = true, fish = true, tcsh = true }
+
 ---Contains terminal instances
 ---@type table<string,terminal>
 user_config.terminal = user_config.terminal or {}
@@ -206,10 +210,10 @@ local function open_term(self)
     local in_nix_shell = false
 
     if is_nix_dir then
-      job_id = vim.fn.termopen('nix-shell', {cwd = self.cwd})
+      job_id = vim.fn.termopen('nix-shell', { cwd = self.cwd })
       in_nix_shell = true
     else
-      job_id = vim.fn.termopen(cmd, {cwd = self.cwd})
+      job_id = vim.fn.termopen(cmd, { cwd = self.cwd })
     end
 
     if job_id == 0 or job_id == -1 then
@@ -217,7 +221,7 @@ local function open_term(self)
     else
       if in_nix_shell then
         local check = basename(cmd)
-        if not check:match('^(bash|zsh|csh|sh|fish|tcsh)$') then
+        if not terminal.valid_shell[check] then
           chansend(job_id, cmd .. "\r")
         end
       end
