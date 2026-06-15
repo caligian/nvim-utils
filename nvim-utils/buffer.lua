@@ -1,37 +1,40 @@
 require 'nvim-utils.state'
-local nvim = require 'nvim-utils.nvim'
+require 'nvim-utils.nvim'
+
 local utils = require 'lua-utils'
 local list = utils.list
 local dict = utils.dict
 local types = utils.types
 local path = utils.path
 
-local function vcmd(fmt, ...)
-  vim.cmd(sprintf(fmt, ...))
-end
-
 ---@param bufnr? number
----@param msg string
----@param err? boolean Throw error
+---@param fmt string
+---@param ... any Throw error
 ---@return string
 local function buf_msg(bufnr, fmt, ...)
-  bufnr = vim.fn.bufnr(bufnr)
+  bufnr = bufnr or vim.fn.bufnr(bufnr)
   return sprintf('buffer[%d]: %s', bufnr, sprintf(fmt, ...))
 end
 
----@param bufnr? number
----@param msg string
----@param err? boolean Throw error
+---@param winid number
+---@param fmt string
+---@param ... any
 ---@return string
 local function win_msg(winid, fmt, ...)
   local bufnr = vim.fn.winbufnr(winid)
   return sprintf('buffer[%d].winid[%d]: %s', bufnr, winid, sprintf(fmt, ...))
 end
 
+---@param bufnr number
+---@param fmt string
+---@param ... any
 function err_buf_msg(bufnr, fmt, ...)
   error(buf_msg(bufnr, fmt, ...))
 end
 
+---@param winid number
+---@param fmt string
+---@param ... any
 function err_win_msg(winid, fmt, ...)
   error(win_msg(winid, fmt, ...))
 end
@@ -1560,17 +1563,21 @@ function dirname(buf)
   if type(buf) == 'string' then
     return path.dirname(buf)
   else
-    return buffer.get_id(buf, {
-      ok = function(bufnr)
-        return path.dirname(buffer.get_name(bufnr))
-      end,
-      err = function(_msg)
-        return nil
-      end
-    })
+    local ok, msg = validate_bufnr(buf)
+    if not ok then
+      return false
+    end
+
+    local name = buffer.get_name(buf)
+    if name then
+      return path.dirname(name)
+    end
   end
 end
 
+buffer.dirname = dirname
+buffer.filename = buffer.get_name
+buffer.get_filename = buffer.get_filename
 buffer.get_dirname = dirname
 
 -- Remove these shitty aliases
@@ -1588,7 +1595,6 @@ buffer.text = buffer.get_text
 buffer.opt = buffer.get_opt
 buffer.var = buffer.get_var
 buffer.dirname = dirname
-
 
 --- Fix these shitheads
 local TODO = {

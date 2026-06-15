@@ -26,7 +26,11 @@ require 'nvim-utils.autocmd'
 ---@field rhs string
 ---@overload fun(modes: string|string[], lhs: string, rhs: string, opts?: keymapOpts)
 keymap = class 'keymap'
+
+--- Valid keyboard options
 keymap.valid_opts = {'remap', 'buffer', 'expr', 'noremap', 'desc', 'callback', 'replace_keycodes'}
+
+--- Valid autocmd options
 keymap.valid_autocmd_opts = autocmd.valid_opts
 
 ---Contains all the keymap objects

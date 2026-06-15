@@ -12,9 +12,13 @@ local validate = utils.validate
 ---@field name string
 ---@field autocmd table<string,autocmd> Contains all added autocommands
 ---@field uid? number Unique ID returned by vim
----@overload fun(name: string)
+---@overload fun(name: string, clear?: boolean)
 augroup = class 'augroup'
+
+---@type table<string|number,augroup>
 user_config.augroup = user_config.augroup or {}
+
+---@type table<string,augroup>
 user_config.augroup_by_uid = user_config.augroup_by_uid or {}
 
 function augroup:initialize(name, clear)
@@ -174,7 +178,7 @@ end
 augroup.push = augroup.append
 
 if not user_config.default_augroup then
-  user_config.default_augroup = augroup 'UserConfig'
+  user_config.default_augroup = augroup 'user_config'
 end
 
 -- augroup.set('MyConfig', {

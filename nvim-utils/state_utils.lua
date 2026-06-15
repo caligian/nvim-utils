@@ -7,6 +7,7 @@ require 'nvim-utils.buffer'
 require 'nvim-utils.filetype'
 require 'nvim-utils.autocmd'
 require 'nvim-utils.buffer_group'
+require 'nvim-utils.command'
 
 user_config.utils = {}
 local utils = user_config.utils
@@ -17,7 +18,15 @@ function utils.setup_buffer_groups(overrides)
 end
 
 function utils.setup_settings(overrides)
+  --- Add overrides here too
   require('config.settings')
+end
+
+function utils.setup_commands(overrides)
+  overrides = overrides or {}
+  local config = require 'config.command'
+  dict.mergef(config, overrides)
+  command.define(config)
 end
 
 function utils.setup_keymaps(overrides)

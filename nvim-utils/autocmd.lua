@@ -61,8 +61,14 @@ local path = require 'lua-utils.path_utils'
 ---@class autocmd : autocmdBase
 ---@overload fun(event: autocmdEvent, callback: autocmdCallback, opts?: autocmdOpts|string|number): autocmdBase
 autocmd = class 'autocmd'
+
+---Valid options
 autocmd.valid_opts = { "pattern", "group", "buffer", "desc", "callback", "command", 'once', 'nested' }
+
+---@type table<string|number,autocmd>
 user_config.autocmd = user_config.autocmd or {}
+
+---@type table<number,autocmd>
 user_config.autocmd_by_uid = user_config.autocmd_by_uid or {}
 
 local t_str_or_fun = types.union('string', 'function')
@@ -160,7 +166,7 @@ function autocmd:initialize(event, callback, opts)
   opts = opts or {}
   self.event = event
   self.desc = self.desc or opts.desc
-  self.group = opts.group
+  self.group = opts.group or 'user_config'
   self.once = opts.once
   self.nested = opts.nested
   self.uid = false
