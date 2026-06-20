@@ -1,20 +1,14 @@
-local dict = require 'lua-utils.dict'
-local list = require 'lua-utils.list'
-local params = require 'lua-utils.validate'
+#!/usr/bin/env luajit
+
+require 'nvim-utils.state'
+
+local lutils = require 'lua-utils'
 local class = require 'lua-utils.class'
-local copy = require 'lua-utils.copy'
 local types = require 'lua-utils.types'
 local path = require 'lua-utils.path_utils'
+local validate = lutils.validate
 
----@class autocmdFunctionSignature
----@field id number
----@field event string
----@field file string
----@field match string
----@field buf number
----@field data any
-
----@class autocmdCallbackSignature
+---@class autocmd.callback.args
 ---@field id number
 ---@field event string
 ---@field file string
@@ -27,46 +21,57 @@ local path = require 'lua-utils.path_utils'
 ---@field dirname string
 ---@field basename string
 
----@alias autocmdEvent string|[]string
----@alias autocmdPattern string|[]string
----@alias autocmdCallback string|fun(args: autocmdCallbackSignature)
+---@alias autocmd.event string|string[]
+---@alias autocmd.pattern string|string[]
+---@alias autocmd.callback string|fun(args: autocmd.callback.args)
 
----@class autocmdOpts
----@field pattern? autocmdPattern
+---@class autocmd.opts
+---@field pattern? autocmd.pattern
 ---@field group string|number
 ---@field buffer? number
 ---@field desc? string
----@field callback? autocmdCallback
----@field command?  autocmdCallback
+---@field callback? autocmd.callback
+---@field command?  autocmd.callback
 
----@class autocmdSpecDictSpec
----@field [1] autocmdEvent
----@field [2] autocmdCallback
----@field [3]? autocmdOpts
+---@class autocmd.config.shape
+---@field [1] autocmd.event
+---@field [2] autocmd.callback
+---@field [3]? autocmd.opts
 
----@alias autocmdSpecDict table<string|autocmdSpecDictSpec>
-
----@class autocmdBase
+---@class autocmd.shape
 ---@field uid? number|boolean
 ---@field name? string
----@field event autocmdEvent
----@field callback? autocmdCallback
----@field command? autocmdCallback
+---@field event autocmd.event
+---@field callback? autocmd.callback
+---@field command? autocmd.callback
 ---@field desc? string
----@field pattern? autocmdPattern|number
----@field pat? autocmdPattern|number
+---@field pattern? autocmd.pattern|number
+---@field pat? autocmd.pattern|number
 ---@field buffer? number
 ---@field buf? number
 
----@class autocmd : autocmdBase
----@overload fun(event: autocmdEvent, callback: autocmdCallback, opts?: autocmdOpts|string|number): autocmdBase
+---@class autocmd : autocmd.shape
+---@overload fun(event: autocmd.event, callback: autocmd.callback, opts?: autocmd.opts|string|number): autocmd.shape
 autocmd = class 'autocmd'
 
 ---Valid options
+---@type string[]
 autocmd.valid_opts = { "pattern", "group", "buffer", "desc", "callback", "command", 'once', 'nested' }
 
+autocmd.validator = {
+  event = types.union('string', 'table'),
+  run = types.union('callable', 'string'),
+  opt_opts = 'table',
+}
+
+---Global state
 ---@type table<string|number,autocmd>
 user_config.autocmd = user_config.autocmd or {}
+
+---@class autocmd.config.shape
+---@field [1] autocmd.event
+---@field [2] autocmd.callback
+---@field [3]? autocmd.opts
 
 ---@type table<number,autocmd>
 user_config.autocmd_by_uid = user_config.autocmd_by_uid or {}
@@ -154,6 +159,11 @@ local function fix_pattern(self, opts)
 end
 
 function autocmd:initialize(event, callback, opts)
+  validate.autocmd(
+    { event = event, run = callback, opts = opts },
+    autocmd.validator
+  )
+
   local t_opts = type(opts)
   if t_opts == 'number' then
     self.buffer = opts
@@ -219,19 +229,27 @@ function autocmd:again()
   return self:enable(true)
 end
 
----@param event autocmdEvent
----@param opts autocmdOpts
+---Public facing API
+
+---@param event autocmd.event
+---@param opts autocmd.opts
 ---@return autocmd
 function autocmd.set(event, callback, opts)
   local au = autocmd(event, callback, opts)
   au:enable()
+
   return au
 end
 
+---Quickly define autocommands in bulk
+---Usage:
+---autocmd.define.hello('BufEnter', ':echo "hello"', {pattern = '*.lua'})
+---autocmd.define { hello = {'BufEnter', 'echo "hello"', {pattern = '*.lua'}}, ... }
+---@overload fun(specs: table<string, autocmd.config.shape>): table<string,autocmd.config.shape>
 autocmd.define = bless {}
 
 function autocmd.define:__index(name)
-  return function (event, cb, opts)
+  return function(event, cb, opts)
     opts = opts or {}
     opts = vim.deepcopy(opts)
     opts.name = name

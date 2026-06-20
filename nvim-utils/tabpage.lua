@@ -1,4 +1,4 @@
-local tabpage = {}
+tabpage = {}
 local list = require('lua-utils.list')
 
 tabpage.get_number = vim.api.nvim_tabpage_get_number

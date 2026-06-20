@@ -1,11 +1,14 @@
-local path_utils = require 'lua-utils.path_utils'
+#!/usr/bin/env luajit
+
+require 'nvim-utils.state'
+require 'lua-utils.class'
+require 'nvim-utils.buffer'
+require 'nvim-utils.nvim'
+
 local validate = require 'lua-utils.validate'
+local path_utils = require 'lua-utils.path_utils'
 
-require('lua-utils.class')
-require('nvim-utils.buffer')
-require('nvim-utils.nvim')
-
----@class terminal
+---@class terminal.shape
 ---@field command? string
 ---@field cmd? string
 ---@field cwd? string
@@ -13,6 +16,8 @@ require('nvim-utils.nvim')
 ---@field id? number
 ---@field pid? number
 ---@field buffer? number
+
+---@class terminal : terminal.shape
 terminal = class 'terminal'
 
 --- Since we are using nix-shell in some places, skip running the shell interpreter

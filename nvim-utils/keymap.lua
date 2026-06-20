@@ -1,13 +1,16 @@
+#!/usr/bin/env luajit
+
 local lutils = require 'lua-utils'
 local types = lutils.types
 local validate = lutils.validate
 local class = lutils.class
 local dict = lutils.dict
+local union = types.union
 
-local utils = require 'nvim-utils.utils'
+require 'nvim-utils.state'
 require 'nvim-utils.autocmd'
 
----@class keymapOpts
+---@class keymap.opts
 ---@field desc? string
 ---@field buffer? number
 ---@field pattern? string|string[]
@@ -20,18 +23,28 @@ require 'nvim-utils.autocmd'
 ---@field replace_keycodes? boolean
 ---@field remap? boolean
 
----@class keymap : keymapOpts
+---@class keymap.shape : keymap.opts
 ---@field modes string|string[]
 ---@field lhs string
 ---@field rhs string
----@overload fun(modes: string|string[], lhs: string, rhs: string, opts?: keymapOpts)
+
+---@class keymap : keymap.shape
+---@overload fun(modes: string|string[], lhs: string, rhs: string, opts?: keymap.opts): keymap.shape
 keymap = class 'keymap'
 
 --- Valid keyboard options
-keymap.valid_opts = {'remap', 'buffer', 'expr', 'noremap', 'desc', 'callback', 'replace_keycodes'}
+keymap.valid_opts = { 'remap', 'buffer', 'expr', 'noremap', 'desc', 'callback', 'replace_keycodes' }
 
 --- Valid autocmd options
 keymap.valid_autocmd_opts = autocmd.valid_opts
+
+---Keymap validator
+keymap.validator = {
+  mode = union('table', 'string'),
+  lhs = 'string',
+  rhs = union('string', types.callable),
+  opt_opts = 'table',
+}
 
 ---Contains all the keymap objects
 user_config.keymap = user_config.keymap or {}
@@ -47,7 +60,7 @@ local function save_id(self, name)
 end
 
 function keymap:opts()
-  local res = {autocmd = {}, keymap = {}, name = self.name or get_id(self.name)}
+  local res = { autocmd = {}, keymap = {}, name = self.name or get_id(self.name) }
 
   for _, au_key in ipairs(keymap.valid_autocmd_opts) do
     res.autocmd[au_key] = self[au_key]
@@ -60,18 +73,22 @@ function keymap:opts()
   return res
 end
 
-
 ---@param modes string|string[]
 ---@param lhs string
 ---@param rhs string|function
----@param opts? keymapOpts
+---@param opts? keymap.opts
 ---@return keymap
 function keymap:initialize(modes, lhs, rhs, opts)
   self.modes = modes
   self.lhs = lhs
   self.rhs = rhs
-
   opts = opts or {}
+
+  validate.args(
+    { mode = modes, lhs = lhs, rhs = rhs, opts = opts },
+    keymap.validator
+  )
+
   dict.merge(self, opts)
   save_id(self, opts.name)
 
@@ -85,7 +102,7 @@ function keymap:enable()
   local name = opts.name
 
   if self.event or self.pattern then
-    local callback = function (args)
+    local callback = function(args)
       kbd_opts = vim.deepcopy(kbd_opts)
       kbd_opts.buffer = args.buf
       vim.keymap.set(self.modes, self.lhs, self.rhs, kbd_opts)
@@ -103,7 +120,7 @@ end
 
 keymap.define = bless {}
 function keymap.define:__index(name)
-  return function (modes, lhs, rhs, opts)
+  return function(modes, lhs, rhs, opts)
     keymap.set(modes, lhs, rhs, opts)
   end
 end
@@ -112,8 +129,9 @@ function keymap.define:__call(specs)
   local res = {}
   for key, value in pairs(specs) do
     local modes, lhs, rhs, o = unpack(value)
-    o = dict.merge(vim.deepcopy(o or {}), opts) 
+    o = vim.deepcopy(o or {})
     o.name = o.name or key
+
     local kbd = keymap.set(modes, lhs, rhs, o)
     res[o.name] = kbd
   end

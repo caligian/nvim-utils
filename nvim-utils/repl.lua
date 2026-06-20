@@ -6,6 +6,18 @@ local validate = utils.validate
 local buffer = require 'nvim-utils.buffer'
 local terminal = require('nvim-utils.terminal')
 
+---@class repl.opts
+---@field root_pattern? string|string[]
+---@field root_check_depth? string|string[]
+---@field input_use_file? string|string[]
+---@field input_apply? function
+---@field input_file_string? string
+
+---@class repl.shape : repl.opts : terminal.shape
+---@field filetype? string
+---@field shell? boolean
+
+---@class repl : repl.shape
 repl = class('Repl', terminal)
 user_config.repl = user_config.repl or {}
 
@@ -29,14 +41,13 @@ function repl:initialize(cwd, opts)
   self.input_use_file = dict.get(opts, { 'input', 'use_file' })
   self.input_file_string = dict.get(opts, { 'input', 'file_string' })
   self.input_apply = dict.get(opts, { 'input', 'apply' })
-  self.filetype = opts.filetype or opts.ft
-  self.ft = self.filetype
+  self.filetype = opts.filetype
   self.shell = opts.shell
 
   terminal.initialize(self, opts.command or opts.cmd, cwd)
 
   if self.shell then
-    self.cmd = user_config.shell_command or 'bash'
+    self.cmd = user_config.shell
     self.command = self.cmd
     user_config.repl.shell[cwd] = self
   else

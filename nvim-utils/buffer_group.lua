@@ -1,3 +1,5 @@
+#!/usr/bin/env luajit
+
 require 'nvim-utils.state'
 require('nvim-utils.buffer')
 require('nvim-utils.augroup')

@@ -1,4 +1,7 @@
--- local toml = require 'nvim-utils.toml'
+#!/usr/bin/env luajit
+
+local lutils = require 'lua-utils'
+require 'nvim-utils'
 local template = require 'lua-utils.template'
 
 t = template(python_template, {

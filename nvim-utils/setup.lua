@@ -8,8 +8,9 @@ require 'nvim-utils.filetype'
 require 'nvim-utils.autocmd'
 require 'nvim-utils.buffer_group'
 require 'nvim-utils.command'
+require 'nvim-utils.autoinsert'
 
-user_config.utils = {}
+user_config.utils = bless {}
 local utils = user_config.utils
 
 function utils.setup_buffer_groups(overrides)
@@ -53,6 +54,10 @@ function utils.setup_plugins()
   require('config.lazy')
 end
 
+function utils.setup_autoinsert(overrides)
+  autoinsert.enable(true)
+end
+
 function utils.setup()
   utils.setup_filetypes()
   utils.setup_plugins()
@@ -60,6 +65,7 @@ function utils.setup()
   utils.setup_autocmds()
   utils.setup_keymaps()
   utils.setup_buffer_groups()
+  utils.setup_autoinsert()
 end
 
 function utils.on_exit(name, callback, opts)
@@ -71,4 +77,4 @@ function utils.on_exit(name, callback, opts)
   -- )
 end
 
-return utils
+utils.setup()

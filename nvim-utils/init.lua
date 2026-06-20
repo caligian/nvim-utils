@@ -1,1 +1,1 @@
-require('nvim-utils.state')
+return require('nvim-utils.setup')

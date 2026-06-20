@@ -1,4 +1,5 @@
-require 'nvim-utils.state'
+#!/usr/bin/env luajit
+
 require 'nvim-utils.autocmd'
 
 local utils = require 'lua-utils'

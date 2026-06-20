@@ -1,4 +1,6 @@
-require 'nvim-utils.state'
+#!/usr/bin/env luajit
+
+local lutils = require 'lua-utils'
 require 'nvim-utils.nvim'
 
 local utils = require 'lua-utils'
@@ -6,6 +8,7 @@ local list = utils.list
 local dict = utils.dict
 local types = utils.types
 local path = utils.path
+local is = require 'lua-utils.is'
 
 ---@param bufnr? number
 ---@param fmt string
@@ -50,67 +53,28 @@ end
 
 ---@param bufnr number
 ---@return boolean, number|string
-local function validate_bufnr(bufnr)
+local function fix_bufnr(bufnr)
   if bufnr == nil then
     bufnr = vim.api.nvim_get_current_buf()
+  elseif bufnr == 0 then
+    error('bufnr: cannot 0 to refer to current buffer')
   end
 
   if is_valid_bufnr(bufnr) then
     return true, bufnr
   else
-    return false, buf_msg(bufnr, 'Invalid buffer')
+    return false, buf_msg(bufnr, 'invalid buffer')
   end
 end
 
 ---Buffer utilities
 buffer = {}
 
---- vim.api.nvim_buf_*
-buffer.vim = {}
-function buffer.vim:__index(name)
-  if not name:match '^nvim_buf_' then
-    name = 'nvim_buf_' .. name
-  end
-
-  local f = vim.api[name]
-  assert(f ~= nil, sprintf('vim.api.%s: Nonexistent function'))
-
-  return f
-end
-
-setmetatable(buffer.vim, buffer.vim)
-
---- vim.api.nvim_buf_* with pcall
-buffer.safe_vim = {}
-function buffer.safe_vim:__index(name)
-  if not name:match '^nvim_buf_' then
-    name = 'nvim_buf_' .. name
-  end
-
-  local f = vim.api[name]
-  assert(f ~= nil, sprintf('vim.api.%s: Nonexistent function'))
-
-  return function(...)
-    return pcall(f, ...)
-  end
-end
-
-setmetatable(buffer.safe_vim, buffer.safe_vim)
-
 --- Disambiguating return values
 ---@class buffer_returns
 ---@field [1] table<string,function> Returns one value
 ---@field [2] table<string,function> Returns two values
----@field one table<string,function> Returns one value
----@field two table<string,function> Returns two values
----@field pcall table<string,function> Returns two values
----@field result table<string,function> Returns {ok = table<number|string, any>, err = table<number|string, any>}
-buffer.returns = {}
-buffer.returns[1] = {}
-buffer.returns[2] = {}
-buffer.returns.one = buffer.returns[1]
-buffer.returns.two = buffer.returns[2]
-buffer.returns.pcall = buffer.returns[2]
+buffer.returns = { {}, {} }
 
 ---@class buffer_result
 ---@field ok table<string, any> | table<string, table<string, any>>
@@ -148,6 +112,41 @@ buffer.get_name = vim.api.nvim_buf_get_name
 buffer.set_current = vim.api.nvim_set_current_buf
 buffer.get_current = vim.api.nvim_get_current_buf
 
+---@class buffer.id.opts
+---@field ok (fun(bufnr: number): boolean, any)|(fun(bufnr: number): any)
+---@field err (fun(bufnr: number): boolean, any)|(fun(bufnr: number): any)
+
+---@param bufnr? number|buffer.id.opts
+---@param ok? buffer.id.opts|(fun(buf: number): boolean, any)
+---@param err? (fun(msg?: string): boolean, any)
+---@return boolean, any
+function buffer.id(bufnr, ok, err)
+  if is.pure_table(bufnr) then
+    return buffer.id(buffer.get_current_id(), bufnr)
+  elseif is.pure_table(ok) then
+    return buffer.id(bufnr, ok.ok, ok.err)
+  end
+
+  ok = ok or function(buf) return true, buf end
+  err = err or function(msg) return false, msg end
+  bufnr = bufnr or vim.fn.bufnr()
+
+  assertf(
+    is.number(bufnr),
+    'bufnr: expected number, got %s [%s]', bufnr, typeof(bufnr)
+  )
+
+  if bufnr < 0 then
+    errorf("bufnr: expected natural number, got %d", bufnr)
+  elseif not buffer.exists(bufnr) then
+    return err(sprintf('expected extant buffer, got %d', bufnr))
+  else
+    return ok(bufnr)
+  end
+end
+
+buffer.get_id = buffer.id
+
 ---@param bufnr number
 ---@return string?
 function buffer.get_name(bufnr)
@@ -162,7 +161,7 @@ end
 ---@param name string
 ---@return boolean, string?
 function buffer.set_name(bufnr, name)
-  local ok, buf = validate_bufnr(bufnr)
+  local ok, buf = fix_bufnr(bufnr)
   if not ok then return false, buf end
 
   ok, _ = pcall(vim.api.nvim_buf_set_name, buf, name)
@@ -195,17 +194,44 @@ function buffer.set_lines(bufnr, start_row, end_row, lines)
   })
 end
 
+---@class buffer.call.signature
+---@field buf string
+---@field file? string
+---@field winnr? number
+---@field winid? number
+
 ---@param bufnr number
----@param f fun(bufnr: number): any
+---@param f fun(args: buffer.call.signature): any
 ---@return boolean, any
 function buffer.call(bufnr, f)
+  local ok, msg = fix_bufnr(bufnr)
+  if not ok then
+    return false, msg
+  end
+
+  local function use_fun()
+    local args = { buf = bufnr, file = buffer.get_name(bufnr) }
+    local success, winid, winnr
+
+    success, winid = buffer.get_winid(bufnr)
+    if success then
+      args.winid = winid
+    end
+
+    success, winnr = buffer.get_winnr(bufnr)
+    if success then
+      args.winnr = winnr
+    end
+
+    return f(args)
+  end
+
   return buffer.get_id(bufnr, {
     ok = function(buf)
-      local use_f = function() return f(buf) end
-      return pcall(vim.api.nvim_buf_call, buf, use_f)
+      return pcall(vim.api.nvim_buf_call, buf, use_fun)
     end,
-    err = function(msg)
-      return false, msg
+    err = function(err_msg)
+      return false, err_msg
     end
   })
 end
@@ -228,45 +254,8 @@ end
 
 buffer.defined = buffer.is_valid
 buffer.undefined = buffer.is_invalid
-
----@class buffer_id_opts
----@field ok (fun(bufnr: number): any)|(fun(bufnr: number): boolean, any)
----@field err (fun(msg?: string): any)|(fun(bufnr: number): boolean, any)
----@field strict? boolean Do not allow even nil values
-
---- Normalize buffer id (No 0s allowed)
----@param bufnr? number
----@param opts buffer_id_opts
----@return any
----@overload fun(): number
----@overload fun(bufnr: number): number?
----@overload fun(bufnr: number, opts: buffer_id_opts): any
----@overload fun(bufnr: nil, opts: buffer_id_opts): any
----@overload fun(bufnr: number, opts: buffer_id_opts): boolean, any
----@overload fun(bufnr: nil, opts: buffer_id_opts): boolean, any
-function buffer.id(bufnr, opts)
-  assert(bufnr ~= 0, "bufnr: Cannot use 0 as a valid buffer number")
-  assert(opts ~= nil, "opts is missing")
-  assert(opts.ok, "opts.ok: Missing callback")
-  assert(opts.err, "opts.err: Missing callback")
-
-  local err = opts.err
-  local ok = opts.ok
-
-  if opts.strict then
-    assert(bufnr ~= nil, 'bufnr: Cannot be nil')
-  end
-
-  if bufnr == nil then
-    return ok(buffer.get_current())
-  elseif buffer.is_valid(bufnr) then
-    return ok(bufnr)
-  elseif err then
-    return err(sprintf("buffer[%d]: Invalid buffer", bufnr))
-  end
-end
-
 buffer.get_id = buffer.id
+
 
 ---@param bufnr number
 ---@return number?
@@ -321,7 +310,7 @@ end
 ---@param var string
 ---@return boolean, string?
 function buffer.del_var(bufnr, var)
-  local ok, buf = validate_bufnr(bufnr)
+  local ok, buf = fix_bufnr(bufnr)
   if not ok then return false, buf end
 
   ok, value = buffer.get_var(buf, var)
@@ -388,7 +377,7 @@ end
 function buffer.set_var(bufnr, var, value)
   return buffer.id(bufnr, {
     ok = function(buf)
-      local ok, msg = pcall(vim.api.nvim_buf_set_var, var, value)
+      local ok, msg = pcall(vim.api.nvim_buf_set_var, buf, var, value)
       if ok then
         return true, value
       else
@@ -774,7 +763,7 @@ function buffer.get_winnr(bufnr)
       if ok then
         return true, winnr
       else
-        return false, sprintf("buffer[%d]: Invalid winnr", buf)
+        return false, sprintf("buffer[%d]: invalid winnr", buf)
       end
     end,
     err = function(msg)
@@ -793,7 +782,7 @@ function buffer.get_winid(bufnr)
       if ok then
         return true, winid
       else
-        return false, sprintf("buffer[%d]: Invalid winid", buf)
+        return false, sprintf("buffer[%d]: invalid winid", buf)
       end
     end,
     err = function(msg)
@@ -815,7 +804,7 @@ end
 ---@param bufnr number
 ---@return boolean, nil|string  (true, nil) or (false, error)
 function buffer.set_current_id(bufnr)
-  local ok, buf = validate_bufnr(bufnr)
+  local ok, buf = fix_bufnr(bufnr)
   if not ok then return false, buf end
   return pcall(vim.api.nvim_set_current_buf, buf)
 end
@@ -1237,7 +1226,7 @@ buffer.terminal = buffer.open_term
 ---@return boolean, buffer_find_return|string?
 function buffer.find_below(bufnr, start_row, patterns, opts)
   local _
-  local ok, msg = validate_bufnr(bufnr)
+  local ok, msg = fix_bufnr(bufnr)
 
   if not ok then
     return false, msg
@@ -1337,7 +1326,7 @@ end
 ---@return boolean, buffer_find_return|string?
 function buffer.find_above(bufnr, start_row, patterns, opts)
   local _
-  local ok, msg = validate_bufnr(bufnr)
+  local ok, msg = fix_bufnr(bufnr)
 
   if not ok then
     return false, msg
@@ -1419,7 +1408,7 @@ function buffer.find_above(bufnr, start_row, patterns, opts)
   return true, results
 end
 
----@class buffer_find_opts
+---@class buffer.find.opts
 ---@field after? number|boolean
 ---@field below? number|boolean
 ---@field before? number|boolean
@@ -1429,14 +1418,14 @@ end
 
 ---@param bufnr number
 ---@param pattern string | string[]
----@param opts? bufferFindOpts
+---@param opts? buffer.find.opts
 ---@return boolean, number?
 function buffer.find(bufnr, start_row, pattern, opts)
 end
 
 ---@param buf number
 ---@param pattern string | string[]
----@param opts? bufferFindOpts
+---@param opts? buffer.find.opts
 ---@return number?
 function buffer.find_below_cursor(buf, pattern, opts)
   opts = opts or {}
@@ -1449,7 +1438,7 @@ end
 
 ---@param buf number
 ---@param pattern string | string[]
----@param opts? bufferFindOpts
+---@param opts? buffer.find.opts
 ---@return number?
 function buffer.find_above_cursor(buf, pattern, opts)
   opts = opts or {}
@@ -1463,7 +1452,7 @@ end
 ---@param buf number
 ---@param linenum boolean | number
 ---@param pattern string | string[]
----@param opts? bufferFindOpts
+---@param opts? buffer.find.opts
 ---@return number?
 function buffer.find_below_and_goto(buf, linenum, pattern, opts)
   opts = opts or {}
@@ -1478,7 +1467,7 @@ end
 ---@param buf number
 ---@param linenum boolean | number
 ---@param pattern string | string[]
----@param opts? bufferFindOpts
+---@param opts? buffer.find.opts
 ---@return number?
 function buffer.find_above_and_goto(buf, linenum, pattern, opts)
   opts = opts or {}
@@ -1492,7 +1481,7 @@ end
 
 ---@param buf number
 ---@param pattern string | string[]
----@param opts? bufferFindOpts
+---@param opts? buffer.find.opts
 ---@return number?
 function buffer.find_below_cursor_and_goto(buf, pattern, opts)
   opts = opts or {}
@@ -1506,7 +1495,7 @@ end
 
 ---@param buf number
 ---@param pattern string | string[]
----@param opts? bufferFindOpts
+---@param opts? buffer.find.opts
 ---@return number?
 function buffer.find_above_cursor_and_goto(buf, pattern, opts)
   opts = opts or {}
@@ -1556,36 +1545,58 @@ function buffer.if_valid_winid(bufnr, opts)
   end
 end
 
+---@param bufnr? number
+---@param lines string|string[]
+---@param lines_type? string (default: 'c')
+---@param after? boolean (default: true)
+---@param follow? boolean (default: true)
+---@return boolean, string?
+function buffer.put(bufnr, lines, lines_type, after, follow)
+  lines = is.string(lines) and { lines } or lines
+  lines_type = lines_type or 'c'
+  after = (undefined(after) and true) or after
+  follow = (undefined(follow) and true) or follow
+
+  return buffer.call(bufnr, function(buf)
+    vim.api.nvim_put(lines, lines_type, after, follow)
+  end)
+end
+
+function buffer.put_after_cursor(bufnr, lines, follow)
+  return buffer.put(bufnr, lines, true, follow)
+end
+
+function buffer.put_before_cursor(bufnr, lines, follow)
+  return buffer.put(bufnr, lines, false, follow)
+end
+
 ---Get dirname of buffer/path
 ---@param buf number|string? (default: 0)
 ---@return string?
 function dirname(buf)
   if type(buf) == 'string' then
-    return path.dirname(buf)
+    if buf == '/' then
+      return
+    else
+      return path.dirname(buf)
+    end
+  elseif not buffer.exists(buf) then
+    return
   else
-    local ok, msg = validate_bufnr(buf)
-    if not ok then
-      return false
-    end
-
-    local name = buffer.get_name(buf)
-    if name then
-      return path.dirname(name)
-    end
+    return path.dirname(buffer.get_name(buf))
   end
 end
 
 buffer.dirname = dirname
 buffer.filename = buffer.get_name
-buffer.get_filename = buffer.get_filename
-buffer.get_dirname = dirname
+buffer.root_dir = buffer.get_root_dir
+buffer.git_dir = buffer.root_dir
 
 -- Remove these shitty aliases
 buffer.filetype = buffer.get_filetype
 buffer.name = buffer.get_name
 buffer.workspace = buffer.get_workspace
 buffer.word_count = buffer.get_word_count
-buffer.root_dir = buffer.get_root_dir
 buffer.current_line = buffer.get_current_line
 buffer.winid = buffer.get_winid
 buffer.winnr = buffer.get_winnr
@@ -1594,7 +1605,6 @@ buffer.lines = buffer.get_lines
 buffer.text = buffer.get_text
 buffer.opt = buffer.get_opt
 buffer.var = buffer.get_var
-buffer.dirname = dirname
 
 --- Fix these shitheads
 local TODO = {

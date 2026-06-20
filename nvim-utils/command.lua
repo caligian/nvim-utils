@@ -1,4 +1,6 @@
-require 'lua-utils.class'
+#!/usr/bin/env luajit
+
+local lutils = require 'lua-utils'
 local arguments = require 'lua-utils.validate'
 local types = require 'lua-utils.types'
 local is = require 'lua-utils.is'
@@ -23,8 +25,10 @@ require 'nvim-utils.buffer'
 ---@field register? boolean
 ---@field keepscript? boolean
 
----@class command : command.opts
+---@class command.shape : command.opts
 ---@overload fun(name: string, cmd: string|function, opts?: command.opts)
+
+---@class command : command.shape
 command = class 'command'
 
 ---Arguments validator for command options
@@ -199,9 +203,10 @@ end
 
 --- Define at bulk
 command.define = bless {}
+command.buffer.define = bless {}
 
 function command.define:__index(name)
-  return function (cmd, opts)
+  return function(cmd, opts)
     return command.set(name, cmd, opts)
   end
 end
@@ -218,7 +223,7 @@ end
 
 function command.buffer.define:__index(bufnr)
   bufnr = bufnr or vim.fn.bufnr()
-  return function (name, cmd, opts)
+  return function(name, cmd, opts)
     return command.buffer.set(bufnr, name, cmd, opts)
   end
 end
