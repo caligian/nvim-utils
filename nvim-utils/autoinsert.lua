@@ -7,32 +7,54 @@ require 'nvim-utils.buffer'
 local is = require 'lua-utils.is'
 
 ---@alias autoinsert.expand string|string[]|(fun(file: string): string|string[])
----@alias autoinsert.pattern string|string[]|(fun(file: string): boolean)
+---@alias autoinsert.pattern string|string[]|(fun(file: string): boolean)|(fun(file: string): boolean)[]
 ---@alias autoinsert.template string[]|(fun(file: string): string|string[])
+---@alias autoinsert.config.shape { [1]: autoinsert.pattern, [2]: autoinsert.expand }
+---@alias autoinsert.config table<string,autoinsert.config.spec>
+
 
 ---@type autocmd?
 user_config.autoinsert = user_config.autoinsert or nil
 
 ---Enable/disable autoinsert autocmd
-autoinsert = {}
+autoinsert = class 'autoinsert'
+local filetypes = user_config.filetype
+local templates = user_config.template
 
+---@param bufname string
+---@param pattern (string|function)[]
+---@return boolean
 local function check(bufname, pattern)
-  if is.callable(pattern) then
-    return pattern(bufname)
-  elseif is.string(pattern) then
-    return bufname:match(pattern) ~= nil
-  else
-    return false
+  pattern = not is.pure_list(pattern) and { pattern } or pattern
+  for i = 1, #pattern do
+    local pat = pattern[i]
+    local ok
+
+    if is.callable(pat) then
+      ok = pat(bufname)
+    elseif is.string(pat) then
+      ok = bufname:match(pat) ~= nil
+    end
+
+    if ok then
+      return true
+    end
   end
+
+  return false
 end
 
+---Check if the pattern matches with the buffer
 ---@param bufnr (number|string)?
+---@param pattern string|string[]|function|function[]
 ---@return boolean
 function autoinsert.check(bufnr, pattern)
   bufnr = bufnr or vim.fn.bufnr() or -1
   if bufnr == '' then
     return false
-  elseif is.string(bufnr) then
+  end
+
+  if is.string(bufnr) then
     return check(bufnr, pattern)
   elseif buffer.exists(bufnr) then
     return autoinsert.check(buffer.get_name(bufnr), pattern)
@@ -41,49 +63,74 @@ function autoinsert.check(bufnr, pattern)
   end
 end
 
----Returns true at insertion in the buffer
----@param bufnr? number
----@return boolean
-function autoinsert.insert(bufnr)
-  local ok, ft, lc, line
-
+---@param bufnr string|number Number for buffer number, string for filetype
+---@return (string|string[]|(fun(file: string): string|string[]))?
+function autoinsert.expand(bufnr)
   bufnr = bufnr or vim.fn.bufnr() or -1
   if not buffer.exists(bufnr) then
-    return false
+    return
   end
 
-  ok, ft = buffer.get_filetype(bufnr)
-  if not ok or not user_config.template[ft] then
-    return false
+  local ok, msg, config, ft
+  ok, msg = buffer.get_filetype(bufnr)
+
+  if not ok then
+    return
+  else
+    ft = msg
   end
 
-  local bufname = buffer.get_name(bufnr)
-  for _, spec in ipairs(user_config.template[ft]) do
-    local pattern, expansion = unpack(spec)
-    if autoinsert.check(bufname, pattern) then
-      if is.string(expansion) then
-        expansion = string.split(expansion, "\n")
-      elseif callable(expansion) then
-        expansion = expansion(bufname)
-        if is.string(expansion) then
-          expansion = string.split(expansion, "\n")
-        end
-      elseif not is.table(expansion) then
-        errorf(
-          '%s: expected string|string[]|function, got %s [%s]',
-          pattern, expansion, typeof(expansion)
-        )
-      end
-
-      vim.api.nvim_buf_call(bufnr, function ()
-        vim.api.nvim_put(expansion, "c", true, true)
-      end)
-
-      return true
+  if ft == '' then
+    return
+  elseif filetypes[ft] then
+    local ft_config = filetypes[ft]
+    if defined(ft_config) and ft_config.template then
+      config = ft_config.template
     end
   end
 
-  return false
+  if undefined(config) then
+    config = templates[ft]
+    if undefined(config) then
+      return nil
+    end
+  end
+
+  config = vim.deepcopy(config)
+  table.sort(config, function (a, b)
+    a.priority = a.priority or 0
+    b.priority = b.priority or 0
+    return a.priority > b.priority
+  end)
+
+  local filename = buffer.filename(bufnr)
+  for _, spec in ipairs(config) do
+    if autoinsert.check(filename, spec[1]) then
+      return spec[2]
+    end
+  end
+end
+
+---Returns true at insertion in the buffer
+---@param bufnr? number
+---@return boolean? status When return value is nil, consider the buffer invalid
+function autoinsert.insert(bufnr)
+  bufnr = bufnr or vim.fn.bufnr() or -1
+  if not buffer.exists(bufnr) then
+    return
+  end
+
+  local expansion = autoinsert.expand(bufnr)
+  if not expansion then
+    return false
+  end
+
+  vim.api.nvim_buf_call(bufnr, function()
+    expansion = is.string(expansion) and string.split(expansion, "\n") or expansion
+    vim.api.nvim_put(expansion, "c", true, true)
+  end)
+
+  return true
 end
 
 ---@param force? boolean
@@ -95,7 +142,7 @@ function autoinsert.enable(force)
   end
 
   user_config.autoinsert = autocmd.set(
-    {'BufNewFile'}, function(args)
+    { 'BufNewFile' }, function(args)
       autoinsert.insert(args.buf)
     end, {
       pattern = '*.*',
@@ -106,3 +153,17 @@ function autoinsert.enable(force)
 
   return true
 end
+
+function autoinsert.load_config()
+  local ok, msg = nvim.pcall(require, 'config.template')
+  if not ok then
+    return false, msg
+  end
+
+  for key, value in pairs(msg) do
+    user_config.template[key] = value
+  end
+end
+
+
+return autoinsert

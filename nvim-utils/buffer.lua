@@ -51,7 +51,7 @@ local function is_valid_bufnr(bufnr)
       vim.api.nvim_buf_is_valid(bufnr)
 end
 
----@param bufnr number
+---@param bufnr? number
 ---@return boolean, number|string
 local function fix_bufnr(bufnr)
   if bufnr == nil then
@@ -96,25 +96,6 @@ local function get_opts(opts, should_deepcopy, assert_keys)
 
   return opts
 end
-
-buffer.del_keymap = vim.api.nvim_buf_del_keymap
-buffer.del_var = vim.api.nvim_buf_del_var
-buffer.get_var = vim.api.nvim_buf_get_var
-buffer.set_var = vim.api.nvim_buf_set_var
-buffer.get_lines = vim.api.nvim_buf_get_lines
-buffer.get_text = vim.api.nvim_buf_get_text
-buffer.get_name = vim.api.nvim_buf_get_name
-buffer.set_keymap = vim.api.nvim_buf_set_keymap
-buffer.set_name = vim.api.nvim_buf_set_name
-buffer.set_text = vim.api.nvim_buf_set_text
-buffer.set_lines = vim.api.nvim_buf_set_lines
-buffer.get_name = vim.api.nvim_buf_get_name
-buffer.set_current = vim.api.nvim_set_current_buf
-buffer.get_current = vim.api.nvim_get_current_buf
-
----@class buffer.id.opts
----@field ok (fun(bufnr: number): boolean, any)|(fun(bufnr: number): any)
----@field err (fun(bufnr: number): boolean, any)|(fun(bufnr: number): any)
 
 ---@param bufnr? number|buffer.id.opts
 ---@param ok? buffer.id.opts|(fun(buf: number): boolean, any)
@@ -1545,13 +1526,27 @@ function buffer.if_valid_winid(bufnr, opts)
   end
 end
 
+---@class buffer.put.opts
+---@field type? string (default: 'c')
+---@field after? boolean (default: true)
+---@field follow? boolean (default: true)
+
 ---@param bufnr? number
 ---@param lines string|string[]
----@param lines_type? string (default: 'c')
----@param after? boolean (default: true)
----@param follow? boolean (default: true)
+---@param opts buffer.put.opts
 ---@return boolean, string?
-function buffer.put(bufnr, lines, lines_type, after, follow)
+function buffer.put(bufnr, lines, opts)
+  opts = opts or {}
+  lines_type, after, follow = opts.type, opts.after, opts.follow
+
+  if is.string(lines) then
+    if lines:match '\n' then
+      lines = string.split(lines, "\n")
+    else
+      lines = { lines }
+    end
+  end
+
   lines = is.string(lines) and { lines } or lines
   lines_type = lines_type or 'c'
   after = (undefined(after) and true) or after
@@ -1562,12 +1557,20 @@ function buffer.put(bufnr, lines, lines_type, after, follow)
   end)
 end
 
+---@param bufnr number
+---@param lines string|string[]
+---@param follow? boolean
+---@return boolean, string?
 function buffer.put_after_cursor(bufnr, lines, follow)
-  return buffer.put(bufnr, lines, true, follow)
+  return buffer.put(bufnr, lines, {follow = follow})
 end
 
+---@param bufnr number
+---@param lines string|string[]
+---@param follow? boolean
+---@return boolean, string?
 function buffer.put_before_cursor(bufnr, lines, follow)
-  return buffer.put(bufnr, lines, false, follow)
+  return buffer.put(bufnr, lines, {follow = follow})
 end
 
 ---Get dirname of buffer/path
@@ -1587,6 +1590,9 @@ function dirname(buf)
   end
 end
 
+buffer.current = buffer.get_current
+buffer.get_current = buffer.get_current_id
+buffer.set_current = buffer.set_current_id
 buffer.dirname = dirname
 buffer.filename = buffer.get_name
 buffer.root_dir = buffer.get_root_dir

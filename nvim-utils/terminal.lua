@@ -48,7 +48,6 @@ function terminal:initialize(cmd, cwd)
   self.command = cmd
   self.cmd = cmd
   self.cwd = cwd
-  self.root_dir = cwd
   self.id = nil
   self.pid = nil
   self.buffer = nil
@@ -58,7 +57,7 @@ function terminal:send(s)
   return self:is_running(function(it)
     if it:is_invalid() then return false end
     if type(s) == 'table' then s = table.concat(s, "\n") end
-    s = s .. "\r\n"
+    s = s .. "\r"
     chansend(it.id, s)
 
     return true
@@ -209,32 +208,40 @@ terminal.get_exit_status = terminal.exit_status
 local function open_term(self)
   local bufnr = vim.api.nvim_create_buf(false, true)
   return buffer.call(bufnr, function()
-    local is_nix_dir = path_utils.is_file(self.cwd .. '/shell.nix')
-    local cmd = self.cmd
-    local job_id
-    local in_nix_shell = false
+    local nix_file = self.cwd .. '/shell.nix'
+    local is_nix_dir = path_utils.is_file(nix_file)
 
-    if is_nix_dir then
-      job_id = vim.fn.termopen('nix-shell', { cwd = self.cwd })
-      in_nix_shell = true
-    else
-      job_id = vim.fn.termopen(cmd, { cwd = self.cwd })
+    if not is_nix_dir then
+      nix_file = self.cwd .. '/default.nix'
+      is_nix_dir = path_utils.is_file(nix_file)
     end
+
+    if not is_nix_dir then
+      nix_file = os.getenv("HOME") .. '/shell.nix'
+    end
+
+    local env = vim.fn.environ()
+    env.TERM = "xterm-256color"
+    local cmd = sprintf('nix-shell %s', nix_file)
+    local job_id = vim.fn.termopen(cmd, { cwd = self.cwd, env = env })
 
     if job_id == 0 or job_id == -1 then
-      errorf("Could not start terminal with cmd `%s' in directory %s", self.cmd, self.cwd)
-    else
-      if in_nix_shell then
-        local check = basename(cmd)
-        if not terminal.valid_shell[check] then
-          chansend(job_id, cmd .. "\r")
-        end
-      end
-
-      self.id = job_id
-      self.buffer = bufnr
-      self.pid = vim.fn.jobpid(self.id)
+      errorf("Could not run command `%s' @ %s", self.cmd, self.cwd)
     end
+
+    local check = basename(cmd)
+    if not terminal.valid_shell[check] then
+      printf("Running command: %s", self.cmd)
+      chansend(job_id, self.cmd .. "\r")
+    end
+
+    self.id = job_id
+    self.buffer = bufnr
+    self.pid = vim.fn.jobpid(self.id)
+    local set_opt = vim.api.nvim_buf_set_option
+
+    set_opt(self.buffer, "relativenumber", false)
+    set_opt(self.buffer, "number", false)
 
     return self.id
   end)
@@ -255,17 +262,10 @@ function terminal:start()
   end
 
   ok = self:is_running(function(it)
-    printf(
-      'Started terminal with command `%s` @ buffer %d @ directory %s',
-      cmd,
-      it.buffer,
-      cwd:gsub(os.getenv('HOME'), '~')
-    )
-
     autocmd.set(
       'TermClose',
       function(args)
-        local ok, msg = pcall(buffer.rm, args.buf)
+        ok, _ = pcall(buffer.rm, args.buf)
         if not ok then
           printf('Could not delete terminal for %s', it.cmd)
         end
@@ -332,11 +332,5 @@ function terminal:hide()
     end
   end)
 end
-
--- term = terminal('python', '/home/Kerambit')
--- term:start()
--- print(term:is_running())
--- term:split()
-
 
 return terminal

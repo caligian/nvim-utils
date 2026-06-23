@@ -1,9 +1,11 @@
-local utils = require('lua-utils')
-local list = utils.list
-local types = utils.types
-local validate = utils.validate
+local lutils = require('lua-utils')
+local list = lutils.list
+local validate = lutils.validate
+local path_utils = lutils.path
+local is = lutils.is
+local copy = lutils.copy
 
-nvim = {}
+nvim = { __module = true, __name = 'nvim' }
 
 function nvim.replace_termcodes(s)
   return vim.api.nvim_replace_termcodes(s, true, false, true)
@@ -25,11 +27,11 @@ function nvim.noh()
   vim.cmd ':noh'
 end
 
-function nvim.next_search()
+function nvim.goto_next_search()
   nvim.normal 'n'
 end
 
-function nvim.prev_search()
+function nvim.goto_prev_search()
   nvim.normal 'N'
 end
 
@@ -65,16 +67,10 @@ function nvim.in_normal_mode()
   return nvim.mode() == 'n'
 end
 
-function nvim.with_region(fn, ...)
-  local _region = nvim.region()
-  if _region then
-    return fn(_region, ...)
-  end
-end
-
 function nvim.ls(dirname, fullname)
   local res = {}
   local abspath = fullname and vim.fs.abspath(dirname)
+
   for f in vim.fs.dir(dirname) do
     if fullname then
       res[#res + 1] = abspath .. '/' .. f
@@ -82,13 +78,16 @@ function nvim.ls(dirname, fullname)
       res[#res + 1] = f
     end
   end
+
   return res
 end
 
+---@param s string
+---@return boolean, any
 function nvim.loadstring(s)
   local ok, msg = loadstring(s)
   if ok then
-    return ok()
+    return true, ok()
   else
     return false, msg
   end
@@ -131,20 +130,12 @@ function nvim.path2require(path)
   return path
 end
 
-function nvim.file_exists(file)
+function nvim.is_file(file)
   return vim.fn.filereadable(file) == 1
 end
 
-function nvim.dir_exists(file)
+function nvim.is_dir(file)
   return vim.fn.isdirectory(file) == 1
-end
-
-function nvim.require_path(path)
-  if not (nvim.file_exists(path) or nvim.dir_exists(path)) then
-    return false
-  else
-    return require(nvim.path2require(path))
-  end
 end
 
 function nvim.require(require_path, callback)
@@ -189,7 +180,6 @@ function nvim.select(choices, prompt, on_choice, formatter)
   )
 end
 
-
 ---@param str_or_fmt string
 ---@param ... string
 ---@return boolean, any
@@ -214,5 +204,194 @@ function nvim.goto_linenum(linenum)
     return false, msg
   end
 end
+
+---Analogue to vim.fn.stdpath
+---@param which string
+---@param ... string any other path to append to create a new path
+---@return string?
+function nvim.stdpath(which, ...)
+  local args = { ... }
+  if #args == 0 then
+    ---@diagnostic disable-next-line
+    return vim.fn.stdpath(which)
+  else
+    return path_utils(vim.fn.stdpath(which), ...)
+  end
+end
+
+---Add the error message to user_config.error and buffer 'user_config.error'
+---@param msg string|string[]
+---@return string[]
+function nvim.push_err_msg(msg)
+  local err_buf = vim.fn.bufnr("user_config.error", true)
+  local curtime = strftime("%c")
+  local fullmsg = string.format("[%s]: %s", curtime, msg)
+  user_config.error[#user_config.error + 1] = fullmsg
+  fullmsg = string.split(fullmsg, "\n")
+  vim.api.nvim_buf_set_lines(err_buf, -1, -1, false, fullmsg)
+
+  return fullmsg
+end
+
+---Call a function with pcall but append the errors to a separate buffer like emacs
+---@param f function
+---@param args any[]
+---@return boolean, string?
+function nvim.pcall(f, args)
+  args = not is.pure_table(args) and { args } or args
+  local ok, msg = pcall(f, unpack(args))
+
+  if not ok then
+    nvim.push_err_msg(msg)
+    return false, msg
+  else
+    return true, msg
+  end
+end
+
+---Require stuff from ~/.config/nvim/lua/
+---@param path string Must be a require-compatible string
+---@return boolean, any
+function nvim.require(path)
+  local require_path = path
+  local config_dir = vim.fn.stdpath('config') .. '/lua'
+  path = path_utils(config_dir, (path:gsub("%.", "/")))
+
+  if path_utils.is_dir(path) then
+    return nvim.pcall(require, require_path)
+  end
+
+  local file = path .. '.lua'
+  if path_utils.is_file(file) then
+    return nvim.pcall(require, require_path)
+  end
+
+  local msg = sprintf("require('%s') failed", path)
+  nvim.push_err_msg(msg)
+
+  return false, msg
+end
+
+strftime = vim.fn.strftime
+strptime = vim.fn.strptime
+
+---Messages buffer
+---@type number?
+user_config.buffer.messages = user_config.buffer.messages or vim.api.nvim_create_buf(true, false)
+
+---Valid types of messages
+---@typ  etable<string,boolean>
+user_config.message_type = user_config.message_type or {
+  'ok',
+  'fatal',
+  'warn',
+  ok = true,
+  fatal = true,
+  warn = true
+}
+
+---Handle messaging module for debugging purposes
+---@overload fun(msg: string, msg_type: string)
+local message = bless {}
+local set_lines = vim.api.nvim_buf_set_lines
+local msg_buf = message.buffer
+
+function message:__call(msg, msg_type)
+  if vim.fn.bufexists(msg_buf) ~= 1 then
+    message.make_buf()
+  end
+
+  msg_type = msg_type or 'ok'
+  if not user_config.message_type[msg_type] then
+    errorf("msg_type: expected any of ok, fatal, warn, got %s", msg_type)
+  end
+
+  local _msg = msg
+  msg = is.string(msg) and string.split(msg, "\n") or msg
+  msg = copy.copy(msg)
+  msg[1] = sprintf('[%s] <%s> %s', string.upper(msg_type), os.date(), msg[1])
+
+  if is.string(_msg) then
+    print(_msg)
+  else
+    print(table.concat(msg, "\n"))
+  end
+
+  local lc = vim.api.nvim_buf_line_count(msg_buf)
+  if lc == 0 then
+    set_lines(msg_buf, 0, -1, false, msg)
+  else
+    set_lines(msg_buf, -1, -1, false, msg)
+  end
+end
+
+function message.make_buf()
+  if vim.fn.bufexists(msg_buf) == 1 then
+    return msg_buf
+  else
+    user_config.buffer.messages = vim.api.nvim_create_buf(true, false)
+    msg_buf = user_config.buffer.messages
+    return msg_buf
+  end
+end
+
+function message.warn(msg)
+  message(msg, 'warn')
+end
+
+function message.ok(msg)
+  message(msg, 'ok')
+end
+
+function message.fatal(msg)
+  message(msg, 'fatal')
+end
+
+function message.error(msg, ...)
+  message(msg, 'fatal')
+  errorf(...)
+end
+
+--- Is message buffer valid?
+function message.is_buf_valid()
+  local buf = user_config.buffer.messages
+  if buf and vim.fn.bufexists(buf) == 1 then
+    return true
+  end
+
+  return false
+end
+
+---Is message buffer visible?
+function message.is_buf_visible()
+  return message.is_buf_valid() and vim.fn.bufwinid(msg_buf) ~= -1
+end
+
+---Show message before
+---@param split? string (valid: v, s, vsplit, split)
+function message.show(split)
+  if message.is_buf_visible() then
+    return
+  end
+
+  local right
+  split = split or 's'
+
+  if split:match 'v' or split:match 'right' then
+    right = true
+  end
+
+  if right then
+    nvim.cmd("vsplit | wincmd l | b %s", msg_buf)
+  else
+    nvim.cmd('split | wincmd j | b %s', msg_buf)
+  end
+end
+
+nvim.message = nvim.message or message
+nvim.msg = nvim.message
+nvim.warn = nvim.msg.warn
+nvim.fatal = nvim.msg.fatal
+nvim.ok = nvim.msg.ok
 
 return nvim

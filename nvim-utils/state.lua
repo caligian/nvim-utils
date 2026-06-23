@@ -14,6 +14,7 @@ local keymap_file = config_dir .. '/keymap.lua'
 local autocmd_file = config_dir .. '/autocmd.lua'
 local template_dir = root_dir .. '/templates'
 local settings_file = root_dir .. '/settings.lua'
+local messages_file = data_dir .. '/messages.txt'
 
 user_config = bless {
   keymap = {}, augroup = {}, autocmd = {}, filetype = {},
@@ -38,12 +39,35 @@ user_config = bless {
           "use strict;",
           "use warnings;",
           "",
-        }
+          "use Getopt::Long",
+          "use File::Path qw(make_path remove_tree);",
+          "use File::Basename;",
+          "use File::Cwd;",
+          "use File::Path;",
+          "use Cwd qw(abs_path getcwd);",
+          "",
+        },
+        priority = -1,
       },
     },
     python = {
       {
-        '.+%.py$',
+        "minute%-record.+%.py$",
+        {
+          "#!/usr/bin/env python",
+          "",
+          "from datetime import date",
+          "from docx import Document",
+          "",
+          "from lib.society import SocietyOutput",
+          "from lib.output import *",
+          "",
+          "",
+        },
+        priority = 0,
+      },
+      {
+        '%.py$',
         {
           "#!/usr/bin/env python",
           "",
@@ -54,7 +78,8 @@ user_config = bless {
           '# from subprocess import run as process, check_output as system',
           "",
           "",
-        }
+        },
+        priority = -1
       },
     },
     lua = {
@@ -63,10 +88,16 @@ user_config = bless {
         {
           "#!/usr/bin/env luajit",
           "",
-          "local lutils = require 'lua-utils'",
+          "local list = require 'lua-utils.list'",
+          "local dict = require 'lua-utils.dict'",
+          "local class = require 'lua-utils.class'",
+          "local types = require 'lua-utils.types'",
+          "local is = require 'lua-utils.is'",
+          "",
           "require 'nvim-utils'",
           "",
-        }
+        },
+        priority = 0,
       },
     },
     sh = {
@@ -75,7 +106,8 @@ user_config = bless {
         {
           '#!/usr/bin/env bash',
           "",
-        }
+        },
+        priority = -1,
       }
     },
     tex = {
@@ -103,7 +135,6 @@ user_config = bless {
           "% Other utility packages",
           "\\usepackage{bookmark}",
           "\\usepackage{ragged2e}",
-          "\\usepackage{xurl}",
           "\\usepackage{lscape}",
           "\\usepackage{booktabs}",
           "\\usepackage{graphicx}",
@@ -156,7 +187,8 @@ user_config = bless {
           "}",
           "",
           "\\end{document}",
-        }
+        },
+        priority = -1
       }
     }
   }
@@ -173,12 +205,14 @@ user_config.path = {
   autocmd_file = autocmd_file,
   settings_file = settings_file,
   plugins_dir = plugins_dir,
+  messages_file = messages_file,
 }
 
 user_config.path.file = {
   keymap = keymap_file,
   autocmd = autocmd_file,
   settings = settings_file,
+  messages = messages_file,
 }
 
 user_config.path.dir = {

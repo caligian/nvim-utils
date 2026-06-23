@@ -1,5 +1,4 @@
 #!/usr/bin/env luajit
-
 local lutils = require 'lua-utils'
 local types = require 'lua-utils.types'
 local dict = require 'lua-utils.dict'
@@ -66,8 +65,9 @@ filetype.validator = {}
 
 ---Validator for filetype specification
 filetype.validator.self = {
-  opt_keymaps = 'table',
-  opt_autocmds = 'table',
+  opt_template = 'table',
+  opt_keymap = 'table',
+  opt_autocmd = 'table',
   opt_run = 'table',
   opt_repl = {
     command = 'string',
@@ -78,7 +78,7 @@ filetype.validator.self = {
     }
   },
   opt_buffer = {
-    opt_vars = 'table', opt_opts = 'table'
+    opt_var = 'table', opt_opt = 'table'
   },
   opt_lsp = 'table',
   opt_root = {
@@ -155,6 +155,7 @@ function filetype:initialize(ft, config)
   self.autocmd = {}
   self.run = {}
   self.augroup = augroup.set('user_config.filetype.' .. self.name, true, {})
+  self.template = user_config.template[self.name]
 
   dict.mergef(self, config)
   dict.set_unless(self, { 'root', 'pattern' }, { '.git' }, true)
@@ -211,7 +212,7 @@ end
 ---@param name string
 ---@param event string|string[]
 ---@param callback function|string
----@param opts? autocmdOpts
+---@param opts? autocmd.opts
 function filetype:set_autocmd(name, callback, opts)
   opts = opts or {}
   opts = vim.deepcopy(opts)
@@ -229,11 +230,11 @@ function filetype:set_keymaps(specs)
   end
 end
 
----@class filetypeAutocmdSpec
+---@class filetype.autocmd.shape
 ---@field [1] string|function
----@field [2]? autocmdOpts
+---@field [2]? autocmd.opts
 
----@param specs? table<string,filetypeAutocmdSpec|function>
+---@param specs? table<string,filetype.autocmd.shape|function>
 ---@return table<string,autocmd>?
 function filetype:set_autocmds(specs)
   self.autocmd = self.autocmd or {}
@@ -259,10 +260,10 @@ function filetype:set_autocmds(specs)
 end
 
 function filetype:set_buf_vars()
-  if self.buffer and self.buffer.vars then
+  if self.buffer and self.buffer.var then
     self:set_autocmd('buffer_vars', function()
       local curbuf = buffer.get_current_id()
-      for key, value in pairs(self.buffer.vars) do
+      for key, value in pairs(self.buffer.var) do
         buffer.set_var(curbuf, key, value)
       end
     end)
@@ -270,11 +271,10 @@ function filetype:set_buf_vars()
 end
 
 function filetype:set_buf_opts()
-  if self.buffer and self.buffer.opts then
-    self:set_autocmd('buffer_opts', function()
-      local curbuf = buffer.get_current_id()
-      for key, value in pairs(self.buffer.opts) do
-        buffer.set_opt(curbuf, key, value)
+  if self.buffer and self.buffer.opt then
+    self:set_autocmd('buffer_opts', function(args)
+      for key, value in pairs(self.buffer.opt) do
+        buffer.set_opt(args.buf, key, value)
       end
     end)
   end
@@ -313,29 +313,26 @@ function filetype:get_root_dir(bufnr, pat, depth)
     return false, msg
   end
 
-  local ft
-  ok, msg = buffer.get_filetype(bufnr)
+  self.root = self.root or {pattern = {".git"}, check_depth = 4}
+  local ws = buffer.get_root_dir(
+    bufnr,
+    pat or self.root.pattern,
+    depth or self.root.check_depth
+  ) or buffer.dirname(bufnr)
 
-  if not ok then
-    return false, sprintf('buffer[%d]: Expected filetype as %s, got %s', bufnr, self.name, msg)
-  else
-    ft = msg
-    if #ft == 0 then
-      return false, sprintf('buffer[%d]: Has empty filetype. Expected filetype %s', bufnr, self.name)
-    end
+  if true then
+    
   end
 
-  local bufname = buffer.get_name(bufnr)
-  local bgs = self.root.buffer_group
-  local ws = buffer.get_root_dir(bufnr, root_opts.pattern, root_opts.check_depth)
-
-  if not bgs[ws] then
-    bgs[ws] = buffer_group(ws, ws)
+  local bg_name = sprintf("%s.%s", self.name, ws)
+  if not user_config.buffer_group[bg_name] then
+    buffer_group(bg_name, ws)
   end
 
   return ws
 end
 
+---Load the configuration file
 ---@return filetype
 function filetype:require()
   local config = require('config.filetype.' .. self.name)

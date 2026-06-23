@@ -3,12 +3,14 @@ local types = require 'lua-utils.types'
 local dict = require 'lua-utils.dict'
 
 require 'nvim-utils.state'
+require 'nvim-utils.nvim'
 require 'nvim-utils.buffer'
 require 'nvim-utils.filetype'
 require 'nvim-utils.autocmd'
 require 'nvim-utils.buffer_group'
 require 'nvim-utils.command'
 require 'nvim-utils.autoinsert'
+require 'nvim-utils.repl'
 
 user_config.utils = bless {}
 local utils = user_config.utils
