@@ -156,6 +156,7 @@ function filetype:initialize(ft, config)
   self.run = {}
   self.augroup = augroup.set('user_config.filetype.' .. self.name, true, {})
   self.template = user_config.template[self.name]
+  self.root = {pattern = {".git"}, check_depth = 4}
 
   dict.mergef(self, config)
   dict.set_unless(self, { 'root', 'pattern' }, { '.git' }, true)

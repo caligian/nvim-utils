@@ -54,7 +54,7 @@ function terminal:initialize(cmd, cwd)
 end
 
 function terminal:send(s)
-  return self:is_running(function(it)
+  return self:when_running(function(it)
     if it:is_invalid() then return false end
     if type(s) == 'table' then s = table.concat(s, "\n") end
     s = s .. "\r"
@@ -133,7 +133,7 @@ end
 
 ---@return boolean
 function terminal:stop()
-  return self:is_running(function(it)
+  return self:when_running(function(it)
     jobstop(it.id)
     buffer.wipeout(it.buffer)
 
@@ -151,7 +151,7 @@ function terminal:stop()
   end)
 end
 
-function terminal:status(timeout)
+function terminal:get_status_code(timeout)
   timeout = timeout or 0
   if self.id then
     return vim.fn.jobwait({ self.id }, timeout)[1]
@@ -160,16 +160,33 @@ function terminal:status(timeout)
   end
 end
 
-terminal.get_status = terminal.status
+---Is terminal running?
+---@return boolean
+function terminal:is_running()
+  if not self.id then
+    return false
+  end
 
-function terminal:is_running(callback)
-  local ok = self:status(0) == -1
-  if ok then
-    if callback then
-      return callback(self)
-    else
-      return true
-    end
+  return self:get_status_code(0) == -1
+end
+
+---@param callback fun(x: terminal.shape)
+---@return any
+function terminal:when_running(callback)
+  local ok = self:is_running()
+  if ok and callback then
+    return callback(self)
+  else
+    return false
+  end
+end
+
+---@param callback fun(x: terminal.shape)
+---@return any
+function terminal:unless_running(callback)
+  local ok = not self:is_running()
+  if ok and callback then
+    return callback(self)
   else
     return false
   end
@@ -179,7 +196,7 @@ function terminal:is_invalid()
   if not self.id then
     return true
   else
-    return self:status(0) == -3
+    return self:get_status_code(0) == -3
   end
 end
 
@@ -191,21 +208,21 @@ function terminal:is_valid()
   end
 end
 
-function terminal:exit_status()
+function terminal:get_exit_status()
   if not self.id then
     return false
   else
-    local status = self:status()
+    local status = self:get_status_code()
     if status < 0 then return false end
     return status
   end
 end
 
-terminal.get_exit_status = terminal.exit_status
-
 ---Returns job id
+---@param self terminal.shape
+---@param shell? boolean
 ---@return boolean, number|string
-local function open_term(self)
+function terminal:open(shell)
   local bufnr = vim.api.nvim_create_buf(false, true)
   return buffer.call(bufnr, function()
     local nix_file = self.cwd .. '/shell.nix'
@@ -223,45 +240,56 @@ local function open_term(self)
     local env = vim.fn.environ()
     env.TERM = "xterm-256color"
     local cmd = sprintf('nix-shell %s', nix_file)
-    local job_id = vim.fn.termopen(cmd, { cwd = self.cwd, env = env })
+
+    ---@diagnostic disable-next-line
+    local job_id = vim.fn.jobstart(cmd, { cwd = self.cwd, env = env, term = true })
 
     if job_id == 0 or job_id == -1 then
-      errorf("Could not run command `%s' @ %s", self.cmd, self.cwd)
+      local msg = sprintf("Could not run command `%s' @ %s", self.cmd, self.cwd)
+      message.fatal(msg)
+      error(msg)
     end
 
-    local check = basename(cmd)
-    if not terminal.valid_shell[check] then
-      printf("Running command: %s", self.cmd)
+    if not shell then
+      message.ok('Starting terminal session with cmd: %s')
       chansend(job_id, self.cmd .. "\r")
     end
 
     self.id = job_id
     self.buffer = bufnr
     self.pid = vim.fn.jobpid(self.id)
-    local set_opt = vim.api.nvim_buf_set_option
 
-    set_opt(self.buffer, "relativenumber", false)
-    set_opt(self.buffer, "number", false)
+    vim.keymap.set(
+      { 'n' }, 'q',
+      ':call HideWindowIfPossible()<CR>',
+      { desc = 'hide buffer', buffer = self.buffer }
+    )
+
+    vim.keymap.set(
+      { 'n' }, 'Q',
+      ':call WipeoutBufferWindowIfPossible()<CR>',
+      { desc = 'hide buffer', buffer = self.buffer }
+    )
 
     return self.id
   end)
 end
 
+---@param shell boolean?
 ---@return boolean
-function terminal:start()
+function terminal:start(shell)
   if self:is_running() then
     return true
   end
 
   local cmd, cwd = self.cmd, self.cwd
-  local ok, msg = open_term(self)
+  local ok, msg = self:open(self, shell)
 
   if not ok then
-    error(msg)
     return false, msg
   end
 
-  ok = self:is_running(function(it)
+  ok = self:when_running(function(it)
     autocmd.set(
       'TermClose',
       function(args)
@@ -275,16 +303,6 @@ function terminal:start()
         desc = sprintf('Delete terminal buffer for %s', it.cmd)
       }
     )
-
-    keymap.set({ 'n' }, 'q', ':call HideWindowIfPossible()<CR>', {
-      buffer = it.buffer,
-      desc = 'Hide buffer'
-    })
-
-    keymap.set({ 'n' }, 'Q', ':call WipeoutWindowIfPossible()<CR>', {
-      buffer = it.buffer,
-      desc = 'Wipeout buffer'
-    })
 
     user_config.terminal[self.id] = it
     user_config.terminal_pid[self.pid] = it
@@ -300,13 +318,13 @@ function terminal:start()
 end
 
 function terminal:is_visible()
-  return self:is_running(function(it)
+  return self:when_running(function(it)
     return buffer.is_visible(it.buffer)
   end)
 end
 
 function terminal:split(direction, resize)
-  return self:is_running(function(it)
+  return self:when_running(function(it)
     if not it:is_visible() then
       buffer.split(buffer.get_current(), direction, resize)
       buffer.set_current(it.buffer)
@@ -326,11 +344,20 @@ function terminal:split_below(resize)
 end
 
 function terminal:hide()
-  return self:is_running(function(it)
+  return self:when_running(function(it)
     if buffer.is_visible(it.buffer) then
       buffer.hide(it.buffer, true)
     end
   end)
 end
 
+-- local ok, git_dir = buffer.in_git_dir()
+-- if ok then
+--   luarepl = terminal('luajit', git_dir)
+--   print(luarepl.cwd)
+--   print(luarepl:start())
+--   pp(luarepl:get_status_code())
+--   luarepl:split()
+-- end
+--
 return terminal

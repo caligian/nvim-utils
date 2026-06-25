@@ -292,7 +292,7 @@ user_config.message_type = user_config.message_type or {
 
 ---Handle messaging module for debugging purposes
 ---@overload fun(msg: string, msg_type: string)
-local message = bless {}
+message = bless {}
 local set_lines = vim.api.nvim_buf_set_lines
 local msg_buf = message.buffer
 

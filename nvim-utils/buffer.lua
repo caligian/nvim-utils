@@ -529,7 +529,7 @@ function buffer.new(name, opts)
 
   vim.api.nvim_buf_call(bufnr, function()
     vim.keymap.set('n', 'q', ':call HideWindowIfPossible()', { desc = 'Hide window', buffer = vim.fn.bufnr() })
-    vim.keymap.set('n', 'Q', ':call WipeoutWindowIfPossible()', { desc = 'Hide window', buffer = vim.fn.bufnr() })
+    vim.keymap.set('n', 'Q', ':call WipeoutBufferWindowIfPossible()', { desc = 'Hide window', buffer = vim.fn.bufnr() })
   end)
 
   if keymaps then
@@ -1178,7 +1178,7 @@ function buffer.open_term(cmd, cwd)
     })
 
     vim.keymap.set('n', 'q', ':call HideWindowIfPossible()<CR>', { buffer = termbufnr })
-    vim.keymap.set('n', 'Q', ':call WipeoutWindowIfPossible()<CR>', { buffer = termbufnr })
+    vim.keymap.set('n', 'Q', ':call WipeoutBufferWindowIfPossible()<CR>', { buffer = termbufnr })
 
     buffer.set_opt(termbufnr, 'buflisted', false)
   end)
@@ -1562,7 +1562,7 @@ end
 ---@param follow? boolean
 ---@return boolean, string?
 function buffer.put_after_cursor(bufnr, lines, follow)
-  return buffer.put(bufnr, lines, {follow = follow})
+  return buffer.put(bufnr, lines, { follow = follow })
 end
 
 ---@param bufnr number
@@ -1570,7 +1570,7 @@ end
 ---@param follow? boolean
 ---@return boolean, string?
 function buffer.put_before_cursor(bufnr, lines, follow)
-  return buffer.put(bufnr, lines, {follow = follow})
+  return buffer.put(bufnr, lines, { follow = follow })
 end
 
 ---Get dirname of buffer/path
@@ -1588,6 +1588,55 @@ function dirname(buf)
   else
     return path.dirname(buffer.get_name(buf))
   end
+end
+
+---@param bufnr? number
+---@param markers string|string[]
+---@param depth? number (depth 4)
+---@return boolean, string
+function buffer.in_dir(bufnr, markers, depth)
+  local ok, msg = fix_bufnr(bufnr or vim.fn.bufnr())
+  assert(ok, msg)
+
+  local function check_file(dir)
+    for i = 1, #markers do
+      local marker = dir .. '/' .. markers[i]
+      if path.is_file(marker) or path.is_dir(marker) then
+        return dir
+      else
+        return false
+      end
+    end
+  end
+
+  bufnr = msg
+  depth = depth or 3
+  local currentdir = dirname(buffer.get_name(bufnr))
+  markers = as_list(markers)
+
+  for _ = 1, depth do
+    if check_file(currentdir) then
+      return true, currentdir--[[@as string]]
+    else
+      currentdir = dirname(currentdir)
+    end
+  end
+
+  return false, sprintf('buffer[%d]: Could not find marker path: %s', bufnr, markers)
+end
+
+---@param bufnr? number
+---@param depth? number (default: 3)
+---@return boolean, string?
+function buffer.in_git_dir(bufnr, depth)
+  return buffer.in_dir(bufnr, ".git", depth)
+end
+
+---@param bufnr? number
+---@param depth? number (default: 3)
+---@return boolean, string?
+function buffer.in_nix_dir(bufnr, depth)
+  return buffer.in_dir(bufnr, {"shell.nix", "default.nix"}, depth)
 end
 
 buffer.current = buffer.get_current

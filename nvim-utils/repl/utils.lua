@@ -16,8 +16,10 @@ local repls = user_config.repl.repl
 ---@param repl_type string
 ---@param bufnr number
 ---@param start? boolean
+---@param check_depth? number
+---@param pattern? string|string[]
 ---@return repl?
-function utils.get(repl_type, bufnr, start)
+function utils.get(repl_type, bufnr, start, pattern, check_depth)
   bufnr = bufnr or vim.fn.bufnr() or -1
   if not buffer.exists(bufnr) then
     printf("No such buffer exists %d", bufnr)
@@ -26,16 +28,25 @@ function utils.get(repl_type, bufnr, start)
 
   local _, ft = buffer.get_filetype(bufnr)
   local ftobj = user_config.filetype[ft]
+  local is_shell = repl_type == "shell"
+  local cmd = is_shell and vim.env.shell or nil
+  local wd = nil
 
-  if ftobj == nil then
+  if (ftobj == nil or (not ftobj.repl)) and not is_shell then
     printf("No specification for filetype %s", ft)
     return
+  elseif is_shell then
+    if buffer.in_git_dir(bufnr, pattern, check_depth) then
+      wd = buffer.get_root_dir(bufnr, pattern, check_depth)
+    else
+      wd = dirname(bufnr)
+    end
+  else
+    wd = filetype.get_root_dir(ftobj, bufnr, pattern, check_depth)
+    cmd = ftobj.repl.command
   end
 
-  local wd = ftobj and ftobj:get_root_dir(bufnr)
-  wd = wd or buffer.get_root_dir(bufnr) or buffer.dirname(bufnr)
   local x
-
   if repl_type == 'repl' then
     x = dict.get(repls, { ft, wd })
   else
@@ -43,6 +54,9 @@ function utils.get(repl_type, bufnr, start)
   end
 
   if x then
+    x.command = cmd
+    x.cmd = cmd
+
     if start then
       x:start()
     else
@@ -51,6 +65,7 @@ function utils.get(repl_type, bufnr, start)
   elseif start then
     ---@diagnostic disable-next-line
     x = repl(bufnr, { shell = repl_type == 'shell' })
+    ---@diagnostic disable-next-line
     x:start()
   end
 
@@ -65,8 +80,8 @@ function utils.make_keymap_command(repl_type, name, start)
     if not is.table(x) then
       return
     elseif name == 'start' then
-      return x:start()
-    elseif x:is_running() and x[name] then
+      return x --[[@as terminal]]:start()
+    elseif x --[[@as terminal]]:is_running() and x[name] then
       x[name](x)
     end
 
@@ -82,7 +97,7 @@ local function shell_fn(name, start)
   return utils.make_keymap_command('shell', name, start)
 end
 
-keymap.define {
+repl.default_mappings = {
   shell_start = { 'n', '<space><enter><enter>', shell_fn('start'), { desc = 'Start REPL' } },
   shell_stop = { 'n', '<space><enter>q', shell_fn('stop'), { desc = 'Stop REPL' } },
   shell_hide = { 'n', '<space><enter>k', shell_fn('hide'), { desc = 'Hide REPL' } },
@@ -105,3 +120,6 @@ keymap.define {
   repl_send_C_d = { 'n', '<space>rd', repl_fn('send_ctrl_d'), { desc = 'Send Ctrl-d' } },
   repl_hide = { 'n', '<space>rk', repl_fn('hide'), { desc = 'Hide REPL' } },
 }
+
+
+return repl
