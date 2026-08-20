@@ -1,166 +1,443 @@
-local utils = require 'lua-utils'
-local class = utils.class
-local types = utils.types
-local dict = utils.dict
-local validate = utils.validate
-local buffer = require 'nvim-utils.buffer'
-local terminal = require('nvim-utils.terminal')
+require 'lua-utils'
 
-user_config.repl.repl = user_config.repl.repl or {}
-user_config.repl.shell = user_config.repl.shell or {}
-
-local repls = user_config.repl.repl
-local shells = user_config.repl.shell
+local dict = require 'lua-utils.dict'
+local terminal = require 'nvim-utils.terminal'
+local buffer = require 'nvim-utils.buffer_utils'
+local utils = require 'nvim-utils.repl.utils'
+local nvim = require 'nvim-utils.nvim'
 
 ---@class repl.opts.root
----@field pattern? string|string[]
 ---@field check_depth? number
+---@field depth? number
+
+---@class repl.opts.file
+---@field format? string
+---@field use? boolean
 
 ---@class repl.opts.input
----@field use_file? string|string[]
----@field apply? function
----@field file_string? string
+---@field file? repl.opts.file
+---@field apply? (fun(str: string): string)
+---@field cd? string|(fun(buf: number, bufname: string): string)
 
 ---@class repl.opts
----@field shell? boolean
 ---@field root?  repl.opts.root
 ---@field input? repl.opts.input
 ---@field filetype? string
+---@field workspace? string
+---@field buffer? number
+---@field cmd? repl.cmd
+---@field command? repl.cmd
 
----@class repl.shape : terminal.shape
----@field shell? boolean
----@field root_pattern? string|string[]
----@field root_check_depth? string|string[]
----@field input_use_file? string|string[]
----@field input_apply? function
----@field input_file_string? string
+---@class repl.terminal
+---@field shell terminal
+---@field filetype? terminal
+
+---@class repl.class : class
+---@field terminal? repl.terminal
+---@field input? repl.opts.input
+---@field root? repl.opts.root
 ---@field filetype? string
+---@field cmd? repl.cmd
+---@field workspace? string
 
----@class repl : repl.shape
----@overload fun(bufnr: number, opts?: table): repl.shape
-repl = class('repl', terminal)
+---@class repl : repl.class : instance
 
--- opts = {
---   command = types.string,
---   root = {
---     pattern = types.list_of(types.string),
---     check_depth = types.number
---   },
---   input = {
---     use_file = types.boolean,
---     file_string = types.string,
---     apply = types.fun
---   }
--- }
+---@type repl.class
+---@overload fun(opts: repl.opts): repl
+local repl = class 'repl'
 
-function repl:initialize(bufnr, opts)
+function repl:initialize(opts)
   bufnr = bufnr or vim.fn.bufnr()
   if not buffer.exists(bufnr) then
     errorf('buffer[%d] does not exist', bufnr)
   end
 
-  opts = opts or {}
+  opts               = opts or {}
+  local config_input = opts.input
+  local config_root  = opts.root
+  local cmd          = opts.cmd or opts.cmd
+  local given_buf    = opts.buffer
+  local given_ft     = opts.filetype
+  local workspace    = opts.workspace
+  local ftconfig, terminals
 
-  local _, ft = buffer.get_filetype(bufnr)
-  local ftobj = user_config.filetype[ft]
-  local ftobj_root = ftobj and ftobj.root
-  local ftobj_repl = ftobj and ftobj.repl
+  if not given_buf and not given_ft then
+    errorf("opts: Expected opts.buffer or opts.filetype, got %s", opts)
+  elseif not given_ft then
+    local ok
+    ok, given_ft = buffer.get_filetype(given_buf)
 
-  local root = opts.root or ftobj_root or {}
-  local input = opts.input or (ftobj_repl and ftobj_repl.input) or {}
-  local cmd = opts.command or (ftobj_repl and ftobj_repl.command)
-
-  if opts.shell then
-    cmd = vim.env.shell
-    self.shell = true
+    if not ok then
+      error(given_ft)
+    end
+  elseif not given_buf then
+    given_buf = vim.fn.bufnr()
   end
 
-  if cmd == nil then
-    errorf("No REPL specification exists for filetype %s", ft)
-  end
+  ftconfig       = utils.get_config(given_buf)
+  replconfig     = ftconfig and ftconfig.repl
+  workspace      = workspace or utils.get_workspace(given_buf, ftconfig)
+  cmd            = cmd or utils.get_cmd(given_buf, ftconfig)
+  terminals      = {
+    filetype = cmd and terminal(workspace, cmd),
+    shell = terminal(workspace)
+  }
+  self.terminal  = terminals
+  self.workspace = workspace
+  self.input     = config_input or replconfig and replconfig.input
+  self.root      = config_root or ftconfig.root
+  self.cmd       = cmd
+  self.command   = cmd
+  self.filetype  = given_ft
 
-  local wd = opts.root_dir or opts.cwd or buffer.get_root_dir(
-    bufnr, root.pattern, root.check_depth
-  ) or buffer.dirname(bufnr)
-
-  self.root_pattern = root.pattern or { ".git" }
-  self.root_check_depth = root.check_depth or 4
-  self.input_use_file = input.use_file
-  self.input_file_string = input.file_string
-  self.input_apply = input.apply
-  self.filetype = ft
-
-  if self.shell then
-    shells[wd] = self
-  else
-    repls[ft] = repls[ft] or {}
-    repls[ft][wd] = self
-  end
-
-  terminal.initialize(self, cmd, wd)
+  utils.put(self)
 end
 
--- function repl:initialize(cwd, root_opts, input_opts)
---   opts = opts or {}
---   self.root_pattern = dict.get(opts, { 'root', 'pattern' })
---   self.root_check_depth = dict.get(opts, { 'root', 'check_depth' })
---   self.input_use_file = dict.get(opts, { 'input', 'use_file' })
---   self.input_file_string = dict.get(opts, { 'input', 'file_string' })
---   self.input_apply = dict.get(opts, { 'input', 'apply' })
---   self.filetype = opts.filetype
---   self.shell = opts.shell
---
---   terminal.initialize(self, opts.command or opts.cmd, cwd)
---
---   if self.shell then
---     self.cmd = user_config.shell
---     self.command = self.cmd
---     user_config.repl.shell[cwd] = self
---   else
---     validate.filetype(opts.filetype, types.string)
---     user_config.repl.repl[cwd] = user_config.repl.repl[cwd] or {}
---     user_config.repl.repl[cwd][self.filetype] = self
---   end
--- end
---
-function repl:exists(callback)
-  local exists
-  if self.shell then
-    exists = user_config.repl.shell[self.cwd]
-  else
-    exists = dict.get(
-      user_config.repl.repl,
-      { self.cwd, self.filetype }
-    )
-  end
+function repl:has_filetype()
+  return self.terminal.filetype ~= nil
+end
 
-  if exists then
-    return defined(callback) and callback(exists) or exists
+---@param repl_type string
+---@param terminal_fn string
+---@param fn? (fun(x: terminal): any)
+function repl:on(repl_type, terminal_fn, fn)
+  local term = self.terminal[repl_type]
+  local termfn = term and term[terminal_fn]
+
+  if term == nil then
+    return
+  elseif fn then
+    return fn(termfn(term))
   else
-    return false
+    return termfn(term)
   end
 end
 
-function repl:send(s)
-  if self.input_use_file and not self.shell then
+---@param repl_type string
+---@return boolean?
+function repl:is_running(repl_type)
+  if not self.terminal[repl_type] then
+    return
+  end
+
+  ---@type terminal
+  local term = self.terminal[repl_type]
+  return term:is_running(term)
+end
+
+---If terminal is running, then call this function
+---@generic T
+---@param repl_type string
+---@param fn (fun(x: repl): T)
+---@return T?
+function repl:if_running(repl_type, fn)
+  if self:is_running(repl_type) then
+    return fn(self.terminal[repl_type])
+  end
+end
+
+---@param repl_type string
+---@param s string
+function repl:send(repl_type, s)
+  ---@type terminal
+  local ft_term = self.terminal.filetype
+  ---@type terminal
+  local sh_term = self.terminal.shell
+
+  if repl_type == 'shell' then
+    return sh_term:send(s)
+  end
+
+  local use_file = self.input and self.input.file and self.input.file.use
+  local file_string = use_file and self.input.file.format
+  local apply = self.input and self.input.apply
+
+  if not use_file then
+    if apply then
+      ft_term:send(apply(s))
+    else
+      ft_term:send(s)
+    end
+  else
     local filename = vim.fn.tempname()
     local fh = io.open(filename, 'w')
 
-    fh:write(s)
+    if apply then
+      fh:write(apply(s))
+    else
+      fh:write(s)
+    end
+
     fh:close()
-
-    validate.file_string(self.input_file_string, 'string')
-    s = self.input_file_string:format(filename)
-
+    s = file_string:format(filename)
     local timer = vim.uv.new_timer()
+
     timer:start(10000, 0, vim.schedule_wrap(function()
       pcall(vim.fs.rm, filename)
       timer:stop()
       timer:close()
     end))
+
+    return terminal.send(ft_term, s)
+  end
+end
+
+function repl:send_region(repl_type, bufnr)
+  bufnr = bufnr or buffer.current()
+  return buffer.call(bufnr, function()
+    local region = nvim.region(false)
+    if region then
+      self:send(repl_type, region)
+    end
+  end)
+end
+
+function repl:send_buffer(repl_type, bufnr)
+  bufnr = bufnr or buffer.current()
+  self:send(repl_type, buffer.as_string(bufnr))
+end
+
+function repl:send_current_line(repl_type, bufnr)
+  bufnr = bufnr or buffer.current()
+  self:send(repl_type, buffer.get_current_line(bufnr))
+end
+
+function repl:send_ctrl_c(repl_type)
+  return self:send(repl_type, '')
+end
+
+function repl:send_ctrl_z(repl_type)
+  return self:send(repl_type, '')
+end
+
+function repl:send_ctrl_d(repl_type)
+  return self:send(repl_type, '')
+end
+
+function repl:split(repl_type, direction, resize)
+  local term = self.terminal[repl_type]
+  if term == nil then
+    return
+  else
+    return term:split(direction, resize)
+  end
+end
+
+function repl:show(repl_type, direction, resize)
+  local term = self.terminal[repl_type]
+  if term == nil then
+    return
+  else
+    return term:split(direction, resize)
+  end
+end
+
+---@return boolean
+function repl:start_filetype()
+  local term = self.terminal.filetype
+  if term and term:is_running() then
+    return true
   end
 
-  return terminal.send(self, s)
+  term = terminal(self.workspace, self.cmd)
+  term:start()
+  self.terminal.filetype = term
+
+  return true
+end
+
+---@return boolean
+function repl:start_shell()
+  local term = self.terminal.shell
+  if term and terminal.is_running(term) then
+    return true
+  end
+
+  term = terminal(self.workspace)
+  term:start()
+  self.terminal.shell = term
+
+  return true
+end
+
+---@param repl_type string
+---@return terminal?
+function repl:start(repl_type)
+  if repl_type == 'shell' then
+    self:start_shell()
+  else
+    self:start_filetype()
+  end
+
+  return self.terminal[repl_type]
+end
+
+function repl:stop(repl_type)
+  local term = self.terminal[repl_type]
+  if term == nil then
+    return
+  else
+    return terminal.stop(term)
+  end
+end
+
+function repl:split_right(repl_type, resize)
+  local term = self.terminal[repl_type]
+  if term == nil then
+    return
+  else
+    return term:split_right(resize)
+  end
+end
+
+function repl:split_below(repl_type, resize)
+  local term = self.terminal[repl_type]
+  if term == nil then
+    return
+  else
+    return term:split_below(resize)
+  end
+end
+
+function repl:cd_cwd(repl_type, bufnr)
+  bufnr = bufnr or buffer.current()
+  if repl_type == 'shell' then
+    return self:send('shell', 'cd ' .. buffer.dirname(bufnr))
+  end
+
+  local cd_str = self.input and self.input.cd
+  if not cd_str then
+    printf("REPL.%s: Cannot cd into current buffer's directory", repl_type)
+    return
+  end
+
+  local filename = buffer.filename(bufnr)
+  if callable(cd_str) then
+    self:send('filetype', cd_str(bufnr, filename))
+  else
+    assertf(is.string(cd_str), 'Expected string, got [%s] %s', type(cd_str), cd_str)
+    self:send('filetype', string.format(cd_str, buffer.dirname(filename)))
+  end
+end
+
+---@param repl_type string
+function repl:hide(repl_type)
+  if self.terminal[repl_type] then
+    ---@type terminal
+    local term = self.terminal[repl_type]
+    term:hide()
+  end
+end
+
+---@param bufnr? number
+---@return repl?
+function utils.get(bufnr)
+  bufnr = bufnr or buffer.current()
+  local ws = utils.get_workspace(bufnr)
+  local ft = buffer.get_filetype(bufnr)
+  local REPL = dict.get(user_config.state, { 'repl', ws, ft })
+
+  if REPL then
+    return REPL
+  else
+    return repl { workspace = ws, filetype = ft, buffer = bufnr }
+  end
+end
+
+---@param x repl
+function utils.put(x)
+  dict.put(user_config.state, { 'repl', x.workspace, x.filetype }, x)
+end
+
+function utils.make_keymap_cmd(repl_type, fn)
+  return function(...)
+    local buf = buffer.current()
+    local exists = utils.get(buf)
+    return exists and exists[fn](exists, repl_type, ...)
+  end
+end
+
+function utils.make_keymap(repl_type, modes, lhs, rhs, opts)
+  rhs = utils.make_keymap_cmd(repl_type, rhs)
+  vim.keymap.set(modes, lhs, rhs, opts)
+end
+
+function utils.make_keymaps(repl_type)
+  return function(specs)
+    for key, value in pairs(specs) do
+      key = repl_type .. '.' .. key
+      value = vim.deepcopy(value)
+      local opts = value[4]
+      opts.desc = opts.desc or key
+      value[4] = opts
+      utils.make_keymap(repl_type, unpack(value))
+    end
+  end
+end
+
+function utils.make_default_keymaps()
+  utils.make_keymaps 'filetype' {
+    start             = { "n", "<leader>rr", "start", {} },
+    hide              = { "n", "<leader>rk", "hide", {} },
+    send_current_line = { "n", "<leader>re", "send_current_line", {} },
+    send_region       = { "v", "<leader>re", "send_region", {} },
+    send_buffer       = { "n", "<leader>rb", "send_buffer", {} },
+    split_right       = { "n", "<leader>rv", "split_right", {} },
+    split_below       = { "n", "<leader>rs", "split_below", {} },
+    stop              = { "n", "<leader>rq", "stop", {} },
+    cd                = { "n", "<leader>r.", "cd_cwd", {} },
+  }
+
+  utils.make_keymaps 'shell' {
+    start             = { "n", "<leader><enter><enter>", "start", {} },
+    hide              = { "n", "<leader><enter>k", "hide", {} },
+    send_current_line = { "n", "<leader><enter>e", "send_current_line", {} },
+    send_region       = { "v", "<leader><enter>e", "send_region", {} },
+    send_buffer       = { "n", "<leader><enter>b", "send_buffer", {} },
+    split_right       = { "n", "<leader><enter>v", "split_right", {} },
+    split_below       = { "n", "<leader><enter>s", "split_below", {} },
+    stop              = { "n", "<leader><enter>q", "stop", {} },
+    cd                = { "n", "<leader><enter>.", "cd_cwd", {} },
+  }
+
+  local function make_shell()
+    user_config.repl.system = user_config.repl.system or terminal(os.getenv("HOME"))
+    return user_config.repl.system
+  end
+
+  local function on_shell(fn, ...)
+    local sh = make_shell()
+    sh[fn](sh, ...)
+  end
+
+  local function make_shell_keymap(modes, lhs, fn, opts)
+    vim.keymap.set(modes, lhs, function()
+      on_shell(fn)
+    end, opts)
+  end
+
+  local function make_shell_keymaps(specs)
+    for key, value in pairs(specs) do
+      key = 'shell.' .. key
+      value = vim.deepcopy(value)
+      local opts = value[4]
+      opts.desc = opts.desc or key
+      value[4] = opts
+      make_shell_keymap(unpack(value))
+    end
+  end
+
+  make_shell_keymaps {
+    start             = { "n", "<leader>xx", "start", {} },
+    hide              = { "n", "<leader>xk", "hide", {} },
+    send_current_line = { "n", "<leader>xe", "send_current_line", {} },
+    send_region       = { "v", "<leader>xe", "send_region", {} },
+    send_buffer       = { "n", "<leader>xb", "send_buffer", {} },
+    split_right       = { "n", "<leader>xv", "split_right", {} },
+    split_below       = { "n", "<leader>xs", "split_below", {} },
+    stop              = { "n", "<leader>xq", "stop", {} },
+    cd_cwd            = { "n", "<leader>x.", "cd_cwd", {} },
+  }
 end
 
 return repl

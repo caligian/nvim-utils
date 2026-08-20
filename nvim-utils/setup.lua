@@ -1,16 +1,19 @@
+require 'lua-utils'
+
 local path = require 'lua-utils.path_utils'
-local types = require 'lua-utils.types'
 local dict = require 'lua-utils.dict'
 
 require 'nvim-utils.state'
-require 'nvim-utils.nvim'
-require 'nvim-utils.buffer'
+local nvim = require 'nvim-utils.nvim'
+local buffer = require 'nvim-utils.buffer_utils'
+local autocmd = require 'nvim-utils.autocmd'
+
 require 'nvim-utils.filetype'
-require 'nvim-utils.autocmd'
 require 'nvim-utils.buffer_group'
 require 'nvim-utils.command'
-require 'nvim-utils.autoinsert'
 require 'nvim-utils.repl'
+require 'nvim-utils.pkgs'
+require 'nvim-utils.template'
 
 user_config.utils = bless {}
 local utils = user_config.utils
@@ -26,10 +29,28 @@ function utils.setup_settings(overrides)
 end
 
 function utils.setup_commands(overrides)
+  vim.api.nvim_create_user_command(
+    'Messages', function(args)
+      if args.args:match 'v' then
+        vim.cmd('vsplit | wincmd l | b ' .. user_config.messages.buffer)
+      else
+        vim.cmd('split | wincmd j | b ' .. user_config.messages.buffer)
+      end
+    end, {
+      nargs = '?',
+      desc = "Show system packages",
+      complete = function()
+        return { "split", "vsplit" }
+      end,
+    }
+  )
+
   overrides = overrides or {}
-  local config = require 'config.command'
-  dict.mergef(config, overrides)
-  command.define(config)
+  local ok, config = pcall(require, 'config.command')
+  if ok and is.table(config) then
+    dict.mergef(config, overrides)
+    command.define(config)
+  end
 end
 
 function utils.setup_keymaps(overrides)
@@ -52,12 +73,13 @@ function utils.setup_filetypes(overrides)
   filetype.utils.setup_builtin(overrides)
 end
 
-function utils.setup_plugins()
-  require('config.lazy')
+function utils.setup_plugins(overrides)
+  local plugins = require('nvim-utils.pkgs')
+  plugins:setup(overrides)
 end
 
-function utils.setup_autoinsert(overrides)
-  autoinsert.enable(true)
+function utils.setup_templates(overrides)
+  user_config.template.setup(overrides)
 end
 
 function utils.setup()
@@ -67,16 +89,10 @@ function utils.setup()
   utils.setup_autocmds()
   utils.setup_keymaps()
   utils.setup_buffer_groups()
-  utils.setup_autoinsert()
-end
-
-function utils.on_exit(name, callback, opts)
-  -- local opts_ = vim.deepcopy(opts)
-  -- opts_.pattern = pattern
-  -- opts = {pattern = pattern}
-  -- user_config.default_augroup:add_autocmd(
-  --   name, 'VimLeavePre', pattern, callback, opts
-  -- )
+  utils.setup_templates()
+  utils.setup_commands()
 end
 
 utils.setup()
+
+return utils

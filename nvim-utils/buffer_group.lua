@@ -1,16 +1,12 @@
-#!/usr/bin/env luajit
-
+require 'lua-utils'
 require 'nvim-utils.state'
-require('nvim-utils.buffer')
-require('nvim-utils.augroup')
 
-local utils = require 'lua-utils'
-local types = utils.types
-local list = utils.list
-local dict = utils.dict
-local class = utils.class
-local nvim = require('nvim-utils.nvim')
-local picker = require('nvim-utils.picker')
+local path = require 'lua-utils.path_utils'
+local augroup = require 'nvim-utils.augroup'
+local list = require 'lua-utils.list'
+local dict = require 'lua-utils.dict'
+local picker = require 'nvim-utils.picker'
+local buffer = require 'nvim-utils.buffer_utils'
 
 ---@class buffer_group.cache
 ---@field buffer table<number,string>
@@ -88,20 +84,20 @@ function buffer_group:add(bufnr)
     return false
   elseif self.cache.removed[bufnr] or self.cache.removed[bufname] then
     return false
-  elseif not types.string(self.pattern) and not types.callable(self.pattern) then
+  elseif not is.string(self.pattern) and not callable(self.pattern) then
     return false
-  elseif types.string(self.pattern) then
+  elseif is.string(self.pattern) then
     if not bufname:find(self.pattern, 1, true) then
       return false
     end
-  elseif types.table(self.pattern) then
+  elseif is.table(self.pattern) then
     for i = 1, #self.pattern do
       local pattern = self.pattern[i]
       if not bufname:find(pattern, 1, true) then
         return false
       end
     end
-  elseif types.callable(self.pattern) then
+  elseif is.callable(self.pattern) then
     if not self.pattern(bufnr) then
       return false
     end
@@ -133,8 +129,8 @@ function buffer_group:index(bufnr, removed)
   end
 
   local search_in = removed and self.removed or self.buffer
-  local is_num = types.number(bufnr)
-  local is_str = types.string(bufnr)
+  local is_num = is.number(bufnr)
+  local is_str = is.string(bufnr)
 
   for i = 1, #search_in do
     local buf, bufname = unpack(search_in[i])
@@ -333,9 +329,9 @@ function utils.buffer_group_picker(groups)
     local name = entry.name:gsub(os.getenv('HOME'), '~')
     local display
 
-    if types.callable(entry.pattern) then
+    if callable(entry.pattern) then
       display = name
-    elseif types.string(entry.pattern) then
+    elseif is.string(entry.pattern) then
       display = sprintf('%s :: %s', name, entry.pattern)
     else
       display = name

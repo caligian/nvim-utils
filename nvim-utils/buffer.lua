@@ -1,14 +1,11 @@
 #!/usr/bin/env luajit
 
-local lutils = require 'lua-utils'
-require 'nvim-utils.nvim'
+require 'lua-utils'
 
-local utils = require 'lua-utils'
-local list = utils.list
-local dict = utils.dict
-local types = utils.types
-local path = utils.path
-local is = require 'lua-utils.is'
+local list = require 'lua-utils.list'
+local dict = require 'lua-utils.dict'
+local path = require 'lua-utils.path_utils'
+local nvim = require 'nvim-utils.nvim'
 
 ---@param bufnr? number
 ---@param fmt string
@@ -111,11 +108,7 @@ function buffer.id(bufnr, ok, err)
   ok = ok or function(buf) return true, buf end
   err = err or function(msg) return false, msg end
   bufnr = bufnr or vim.fn.bufnr()
-
-  assertf(
-    is.number(bufnr),
-    'bufnr: expected number, got %s [%s]', bufnr, typeof(bufnr)
-  )
+  assert_is.number(bufnr, 'bufnr')
 
   if bufnr < 0 then
     errorf("bufnr: expected natural number, got %d", bufnr)
@@ -128,9 +121,10 @@ end
 
 buffer.get_id = buffer.id
 
----@param bufnr number
+---@param bufnr? number
 ---@return string?
 function buffer.get_name(bufnr)
+  bufnr = bufnr == nil and buffer.current() or bufnr or -1
   if vim.fn.bufnr(bufnr) == -1 then
     return nil
   else
@@ -154,9 +148,36 @@ function buffer.set_name(bufnr, name)
 end
 
 ---@param bufnr number
----@param start int
----@param end   int
----@param lines []string | string
+---@param return_msg? boolean Return error message
+---@param throw? boolean Throw error on non-existence
+---@return boolean,string?
+function buffer.exists(bufnr, return_msg, throw)
+  bufnr = bufnr or -1
+  if vim.api.nvim_buf_is_valid(bufnr) then
+    return true, nil
+  end
+
+  if return_msg or throw then
+    local msg = sprintf('bufnr: Invalid buffer provided %d', bufnr)
+    if throw then
+      error(msg)
+    else
+      return false, msg
+    end
+  end
+
+  return false, nil
+end
+
+---@param bufnr number
+function buffer.assert_exists(bufnr)
+  buffer.exists(bufnr, true, true)
+end
+
+---@param bufnr number
+---@param start_row number
+---@param end_row   number
+---@param lines string[]|string
 ---@return boolean, string?
 function buffer.set_lines(bufnr, start_row, end_row, lines)
   return buffer.get_id(bufnr, {
@@ -274,6 +295,8 @@ function buffer.rm(bufnr, opts)
     end
   })
 end
+
+buffer.delete = buffer.rm
 
 ---@param bufnr number
 ---@return boolean
@@ -1029,7 +1052,7 @@ function buffer.new_temp(name, opts)
     comment = true
   end
 
-  contents = defined(contents) and types.string(contents) and vim.split(contents, "\n") or contents
+  contents = defined(contents) and is.string(contents) and vim.split(contents, "\n") or contents
   contents = defined(contents) and comment and list.map(contents, function(x)
     return '# ' .. x
   end) or contents
@@ -1125,70 +1148,14 @@ function buffer.get_root_dir(bufnr, pat, depth)
   end
 end
 
-----@param bufnr number
+---@param bufnr number
+---@param opts? nvim.get_workspace.opts
+---@return string?
 function buffer.get_workspace(bufnr, opts)
-  opts = opts or {}
-  local pat = opts.pattern or opts.pat or { '.git' }
-  local depth = opts.depth or opts.check_depth or 4
-  local callback = opts.callback
-  bufnr = bufnr or vim.fn.bufnr()
-  local exists = user_config.workspace[bufnr]
-
-  if exists and callback then
-    return callback(exists)
-  elseif exists then
-    return exists
-  elseif pat then
-    if callback then
-      return callback(buffer.get_root_dir(bufnr, pat, depth))
-    else
-      return buffer.get_root_dir(bufnr, pat, depth)
-    end
-  end
+  local final_opts = { buf = bufnr or buffer.current() }
+  dict.merge(final_opts, opts)
+  return nvim.get_workspace(final_opts)
 end
-
-function buffer.open_term(cmd, cwd)
-  cwd = cwd or path.getcwd()
-  local temp_bufnr = buffer.new(nil, { opts = { buflisted = false } })
-  local job_id, termbufnr
-  local chansend = vim.api.nvim_chan_send
-
-  buffer.call(temp_bufnr, function()
-    vim.cmd('term')
-    buffer.set_opt(bufnr, 'buflisted', false)
-    termbufnr = buffer.get_current_id()
-    job_id = vim.b.terminal_job_id
-    user_config.terminal[job_id] = termbufnr
-    cmd = defined(cwd) and sprintf('cd "%s" && %s', cwd, cmd) or cmd
-
-    printf(
-      'Started terminal with command `%s` @ buffer %d',
-      cmd,
-      cwd:gsub(os.getenv('HOME'), '~'),
-      termbufnr
-    )
-
-    chansend(job_id, cmd .. "\n")
-
-    vim.api.nvim_create_autocmd('TermClose', {
-      buffer = termbufnr,
-      desc = 'Delete terminal buffer',
-      callback = function(args) buffer.rm(args.buf) end,
-      once = true,
-    })
-
-    vim.keymap.set('n', 'q', ':call HideWindowIfPossible()<CR>', { buffer = termbufnr })
-    vim.keymap.set('n', 'Q', ':call WipeoutBufferWindowIfPossible()<CR>', { buffer = termbufnr })
-
-    buffer.set_opt(termbufnr, 'buflisted', false)
-  end)
-
-  buffer.rm(temp_bufnr)
-
-  return termbufnr, job_id
-end
-
-buffer.terminal = buffer.open_term
 
 ---@class buffer_find_below_opts
 ---@field all? boolean (default: false)
@@ -1616,7 +1583,7 @@ function buffer.in_dir(bufnr, markers, depth)
 
   for _ = 1, depth do
     if check_file(currentdir) then
-      return true, currentdir--[[@as string]]
+      return true, currentdir --[[@as string]]
     else
       currentdir = dirname(currentdir)
     end
@@ -1636,7 +1603,7 @@ end
 ---@param depth? number (default: 3)
 ---@return boolean, string?
 function buffer.in_nix_dir(bufnr, depth)
-  return buffer.in_dir(bufnr, {"shell.nix", "default.nix"}, depth)
+  return buffer.in_dir(bufnr, { "shell.nix", "default.nix" }, depth)
 end
 
 buffer.current = buffer.get_current

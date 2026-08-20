@@ -1,19 +1,16 @@
-#!/usr/bin/env luajit
+require 'lua-utils'
+require 'nvim-utils.state'
 
-local lutils = require 'lua-utils'
-local arguments = require 'lua-utils.validate'
-local types = require 'lua-utils.types'
-local is = require 'lua-utils.is'
+local validate = require 'lua-utils.validate'
 local list = require 'lua-utils.list'
 local dict = require 'lua-utils.dict'
+local buffer = require 'nvim-utils.buffer_utils'
 
 local make_command = vim.api.nvim_create_user_command
 local rm_command = vim.api.nvim_del_user_command
 local buf_make_command = vim.api.nvim_buf_create_user_command
 local buf_rm_command = vim.api.nvim_buf_del_user_command
 
-require 'nvim-utils.state'
-require 'nvim-utils.buffer'
 
 ---@class command.opts
 ---@field nargs? number|string
@@ -33,20 +30,20 @@ command = class 'command'
 
 ---Arguments validator for command options
 command.opts_validator = {
-  opt_nargs = types.union('number', 'string'),
-  opt_complete = types.string,
-  opt_count = types.union('number', 'string', 'boolean'),
-  opt_addr = types.string,
-  opt_bang = types.boolean,
-  opt_bar = types.boolean,
-  opt_register = types.boolean,
-  opt_keepscript = types.boolean,
+  opt_nargs = union('number', 'string'),
+  opt_complete = is.string,
+  opt_count = union('number', 'string', 'boolean'),
+  opt_addr = is.string,
+  opt_bang = is.boolean,
+  opt_bar = is.boolean,
+  opt_register = is.boolean,
+  opt_keepscript = is.boolean,
 }
 
 ---Arguments validator
 command.validator = {
-  name = types.string,
-  command = types.union('string', 'function'),
+  name = is.string,
+  command = union('string', 'function'),
   opt_opts = command.opts_validator,
 }
 
@@ -77,10 +74,6 @@ function command:initialize(name, cmd, opts)
 
     return name
   end
-
-  arguments.params({
-    name = name, command = cmd, opt_opts = opts
-  }, command.validator)
 
   name = snake_to_camel(name)
   self.name = name
@@ -238,6 +231,13 @@ function command.buffer.define:__call(bufnr, specs)
     res[key] = command.buffer.set(bufnr, key, cmd, opts)
   end
   return res
+end
+
+---Other static functions
+command.utils = {}
+
+function command.utils.load_config(overrides)
+  overrides = overrides or {}
 end
 
 return command

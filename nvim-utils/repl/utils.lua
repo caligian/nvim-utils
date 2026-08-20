@@ -1,125 +1,163 @@
-require 'nvim-utils.keymap'
-require 'nvim-utils.repl.repl'
-
-local is = require 'lua-utils.is'
+local list = require 'lua-utils.list'
 local dict = require 'lua-utils.dict'
+local buffer = require 'nvim-utils.buffer_utils'
+local nvim = require 'nvim-utils.nvim'
+local terminal = require 'nvim-utils.terminal'
+local utils = {}
 
-repl.utils = {}
-local utils = repl.utils
 
-dict.set_unless(user_config.repl, { 'shell' }, {})
-dict.set_unless(user_config.repl, { 'repl' }, {})
+---@class filetype.root
+---@field check_depth? number
+---@field depth? number
 
-local shells = user_config.repl.shell
-local repls = user_config.repl.repl
+---@class repl.config.get_config.return
+---@field root filetype.root
+---@field repl? repl.opts
 
----@param repl_type string
+---@class repl.cmd.pattern.args
+---@field buf number
+---@field file string
+---@field workspace string
+---@field dir string
+
+---@class repl.cmd.maker.args : repl.cmd.pattern.args
+
+---@alias repl.cmd.maker string|string[]|(fun(args: repl.cmd.maker.args): string)
+---@alias repl.cmd.pattern string|string[]|(fun(args: repl.cmd.maker.args): boolean)
+---@alias repl.cmd repl.cmd.maker|table<repl.cmd.pattern,repl.cmd.maker>
+
 ---@param bufnr number
----@param start? boolean
----@param check_depth? number
----@param pattern? string|string[]
----@return repl?
-function utils.get(repl_type, bufnr, start, pattern, check_depth)
-  bufnr = bufnr or vim.fn.bufnr() or -1
-  if not buffer.exists(bufnr) then
-    printf("No such buffer exists %d", bufnr)
+---@return filetype?
+function utils.get_ft_config(bufnr)
+  bufnr = bufnr or buffer.current()
+  local ft = buffer.get_filetype(bufnr)
+
+  if ft ~= nil then
+    ---@type filetype
+    return user_config.filetype[ft]
+  end
+end
+
+---@param args repl.cmd.pattern.args
+---@param maker repl.cmd.maker
+---@return string?
+function utils.make_cmd_from_maker(args, maker)
+  if is.string(maker) then
+    ---@diagnostic disable-next-line
+    return maker
+  elseif is.callable(maker) then
+    return maker(args)
+  elseif is.pure_list(maker) then
+    ---@diagnostic disable-next-line
+    return maker
+  end
+
+  return nil
+end
+
+---@param args repl.cmd.pattern.args
+---@param pattern repl.cmd.pattern
+---@param maker repl.cmd.maker
+---@return string?
+function utils.make_cmd_from_pattern(args, pattern, maker)
+  if is.callable(pattern) and pattern(args) then
+    return utils.make_cmd_from_maker(args, maker)
+  elseif is.string(pattern) and string.match(args.file, pattern) then
+    return utils.make_cmd_from_maker(args, maker)
+  elseif is.pure_list(pattern) then
+    for i = 1, #pattern do
+      if string.match(args.file, pattern[i]) then
+        return utils.make_cmd_from_maker(args, maker)
+      end
+    end
+  end
+end
+
+---@param args repl.cmd.maker.args
+---@param specs table<repl.cmd.pattern,repl.cmd.maker>
+---@return string?
+function utils.make_cmd_from_dict(args, specs)
+  for pattern, maker in pairs(specs) do
+    local cmd = utils.make_cmd_from_pattern(args, pattern, maker)
+    if cmd then
+      return cmd
+    end
+  end
+end
+
+---@param bufnr? number
+---@return repl.config.get_config.return?
+function utils.get_config(bufnr)
+  bufnr = bufnr or buffer.current()
+  local ft = buffer.get_filetype(bufnr)
+
+  if not ft then
     return
   end
 
-  local _, ft = buffer.get_filetype(bufnr)
-  local ftobj = user_config.filetype[ft]
-  local is_shell = repl_type == "shell"
-  local cmd = is_shell and vim.env.shell or nil
-  local wd = nil
+  local ft_config = utils.get_ft_config(bufnr)
+  if not ft_config or not ft_config.repl then
+    printf("No REPL configuration exists for filetype %s", ft)
+    return { root = { depth = 4 } }
+  end
 
-  if (ftobj == nil or (not ftobj.repl)) and not is_shell then
-    printf("No specification for filetype %s", ft)
+  return {
+    root = { depth = 4 },
+    repl = ft_config.repl,
+  }
+end
+
+---@param bufnr? number
+---@param config? table
+function utils.get_cmd(bufnr, config)
+  bufnr = bufnr or buffer.current()
+  local ft = buffer.get_filetype(bufnr)
+  local ftconfig = config or utils.get_config(bufnr)
+  config = config or ftconfig
+
+  if not config or not config.repl then
+    printf('No command found for %s', ft)
     return
-  elseif is_shell then
-    if buffer.in_git_dir(bufnr, pattern, check_depth) then
-      wd = buffer.get_root_dir(bufnr, pattern, check_depth)
-    else
-      wd = dirname(bufnr)
-    end
   else
-    wd = filetype.get_root_dir(ftobj, bufnr, pattern, check_depth)
-    cmd = ftobj.repl.command
+    config = config.repl
   end
 
-  local x
-  if repl_type == 'repl' then
-    x = dict.get(repls, { ft, wd })
-  else
-    x = dict.get(shells, { wd })
+  local cmd = config.cmd or config.command
+  if not cmd then
+    return
   end
 
-  if x then
-    x.command = cmd
-    x.cmd = cmd
+  local workspace = utils.get_workspace(bufnr, ftconfig)
+  local args = {
+    buf = bufnr,
+    file = buffer.filename(bufnr),
+    workspace = workspace
+  }
 
-    if start then
-      x:start()
-    else
-      return x
-    end
-  elseif start then
-    ---@diagnostic disable-next-line
-    x = repl(bufnr, { shell = repl_type == 'shell' })
-    ---@diagnostic disable-next-line
-    x:start()
-  end
-
-  return x
-end
-
-function utils.make_keymap_command(repl_type, name, start)
-  return function()
-    start = (name == 'start' and true) or start
-    local x = utils.get(repl_type, buffer.current(), start)
-
-    if not is.table(x) then
-      return
-    elseif name == 'start' then
-      return x --[[@as terminal]]:start()
-    elseif x --[[@as terminal]]:is_running() and x[name] then
-      x[name](x)
-    end
-
-    return x
+  if is.callable(cmd) then
+    return cmd(args)
+  elseif is.dict(cmd) then
+    return utils.make_cmd_from_dict(args, cmd)
+  elseif is.string(cmd) or is.pure_list(cmd) then
+    return cmd
   end
 end
 
-local function repl_fn(name, start)
-  return utils.make_keymap_command('repl', name, start)
+---@param bufnr? number
+---@param config filetype
+---@return number
+function utils.get_depth(bufnr, config)
+  config = config or utils.get_config(bufnr)
+  config = config.root --[[@as repl.opts.root]]
+  return config and (config.check_depth or config.depth) or 4
 end
 
-local function shell_fn(name, start)
-  return utils.make_keymap_command('shell', name, start)
+---@param bufnr? number
+---@param config? filetype
+---@return string?
+function utils.get_workspace(bufnr, config)
+  local depth = utils.get_depth(bufnr, config)
+  return nvim.get_workspace { buf = bufnr, depth = depth }
 end
 
-repl.default_mappings = {
-  shell_start = { 'n', '<space><enter><enter>', shell_fn('start'), { desc = 'Start REPL' } },
-  shell_stop = { 'n', '<space><enter>q', shell_fn('stop'), { desc = 'Stop REPL' } },
-  shell_hide = { 'n', '<space><enter>k', shell_fn('hide'), { desc = 'Hide REPL' } },
-  shell_split_below = { 'n', '<space><enter>s', shell_fn('split'), { desc = 'Split below' } },
-  shell_split_right = { 'n', '<space><enter>v', shell_fn('split_right'), { desc = 'Split on right' } },
-  shell_send_buffer = { 'n', '<space><enter>b', shell_fn('send_buffer'), { desc = 'Send buffer' } },
-  shell_send_line = { 'n', '<space><enter>e', shell_fn('send_current_line'), { desc = 'Send current line' } },
-  shell_send_region = { 'v', '<space><enter>e', shell_fn('send_region'), { desc = 'Send region' } },
-  shell_send_C_c = { 'n', '<space>rc', shell_fn('send_ctrl_c'), { desc = 'Send Ctrl-c' } },
-  shell_send_C_d = { 'n', '<space>rd', shell_fn('send_ctrl_d'), { desc = 'Send Ctrl-d' } },
-
-  repl_start = { 'n', '<space>rr', repl_fn('start'), { desc = 'Start' } },
-  repl_stop = { 'n', '<space>rq', repl_fn('stop'), { desc = 'Stop' } },
-  repl_split_below = { 'n', '<space>rs', repl_fn('split'), { desc = 'Split below' } },
-  repl_split_right = { 'n', '<space>rv', repl_fn('split_right'), { desc = 'Split on right' } },
-  repl_send_buffer = { 'n', '<space>rb', repl_fn('send_buffer'), { desc = 'Send buffer' } },
-  repl_send_line = { 'n', '<space>re', repl_fn('send_current_line'), { desc = 'Send current line' } },
-  repl_send_region = { 'v', '<space>re', repl_fn('send_region'), { desc = 'Send region' } },
-  repl_send_C_c = { 'n', '<space>rc', repl_fn('send_ctrl_c'), { desc = 'Send Ctrl-c' } },
-  repl_send_C_d = { 'n', '<space>rd', repl_fn('send_ctrl_d'), { desc = 'Send Ctrl-d' } },
-  repl_hide = { 'n', '<space>rk', repl_fn('hide'), { desc = 'Hide REPL' } },
-}
-
-
-return repl
+return utils

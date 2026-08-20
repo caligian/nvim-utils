@@ -1,13 +1,22 @@
-local utils = require 'lua-utils'
-local types = utils.types
-local validate = utils.validate
-local class = utils.class
-local dict = utils.dict
+require 'lua-utils'
+
+local validate = require 'lua-utils.validate'
+local dict = require 'lua-utils.dict'
 local V = validate
-local picker = class 'Picker'
-user_config.picker = picker
+
+---@class picker : class
+---@field telescope table
+---@field opts table
+---@field actions table
+---@field title string
+---@field state table
+
+---@overload fun(title: string): picker
+local picker = class 'picker'
 
 function picker:initialize(title)
+  assert(title, 'No title for picker provided')
+
   self.telescope = {
     finders = require 'telescope.finders',
     config = require('telescope.config').values,
@@ -17,19 +26,15 @@ function picker:initialize(title)
     actions_state = require 'telescope.actions.state',
   }
 
-  local themes = require("telescope.themes")
-  local theme = themes['get_' .. user_config.telescope.theme]()
-  local opts = user_config.telescope or {}
-  V.telescope_opts(opts, 'table')
+  local opts = {}
+  dict.merge(opts, user_config.telescope.theme)
+  dict.merge(opts, user_config.telescope.opts)
 
-  self.telescope.theme = dict.merge(theme, opts, true)
+  self.opts = {}
   self.actions = {}
   self.title = title
   self.state = self.telescope.actions_state
-
-  V.title(title, 'string')
 end
-
 
 function picker:close(bufnr)
   self.telescope.actions.close(bufnr)
@@ -55,7 +60,7 @@ function picker:entries(bufnr)
 
   local gotten = x:get_multi_selection()
   if #gotten == 0 then
-    gotten = {self:entry(bufnr)}
+    gotten = { self:entry(bufnr) }
   else
     self:close(bufnr)
   end
@@ -64,7 +69,8 @@ function picker:entries(bufnr)
 end
 
 function picker:table(xs, entry_maker)
-  if types.dict(xs) then
+  validate.choices(xs, is.pure_table)
+  if is.dict(xs) then
     xs = dict.items(xs)
     return self.telescope.finders.new_table({
       results = xs,
@@ -77,10 +83,9 @@ function picker:table(xs, entry_maker)
       end
     })
   else
-    V.choices(xs, types.list)
     return self.telescope.finders.new_table({
       results = xs,
-      entry_maker = entry_maker or function (entry)
+      entry_maker = entry_maker or function(entry)
         return {
           display = entry,
           value = entry,
@@ -96,7 +101,7 @@ function picker:create(xs, default_mapping, opts)
 
   V.opts(opts, 'table')
   V.choices(xs, 'table')
-  V.default_mapping(default_mapping, types.callable)
+  V.default_mapping(default_mapping, is.callable)
 
   opts = vim.deepcopy(opts)
   local choices = self:table(xs, opts.entry_maker)
@@ -113,9 +118,9 @@ function picker:create(xs, default_mapping, opts)
   V.keymaps(mappings, 'table')
 
   if #mappings > 0 then
-    for i=1, #mappings do
+    for i = 1, #mappings do
       local cb = self.actions[mappings[i][3]]
-      V.callback(cb, types.callable)
+      V.callback(cb, is.callable)
     end
   end
 
@@ -125,18 +130,16 @@ function picker:create(xs, default_mapping, opts)
       default_mapping(selection)
     end)
 
-    for i=1, #mappings do
+    for i = 1, #mappings do
       local mode, ks, cb, o = unpack(mappings[i])
       o = o or {}
-      o = types.string(o) and { desc = o } or o
+      o = is.string(o) and { desc = o } or o
       cb = self.actions[cb]
       map(mode, ks, cb, o)
     end
 
     return true
   end
-
-  dict.merge(opts, self.telescope.theme)
 
   args.sorter = sorter or self.telescope.sorters.get_fzy_sorter()
   args.finder = choices

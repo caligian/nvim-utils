@@ -1,28 +1,28 @@
-#!/usr/bin/env luajit
+require 'lua-utils'
 
-require 'nvim-utils.autocmd'
+local autocmd = require 'nvim-utils.autocmd'
+local mkgroup = vim.api.nvim_create_augroup
 
-local utils = require 'lua-utils'
-local types = utils.types
-local class = utils.class
-local validate = utils.validate
+---@class augroup.autocmd
+---@field by_id table<integer,autocmd>
+---@field by_name table<string|integer,autocmd>
 
+---@class augroup : augroup.class : instance
 
---- Create autocommand group
----@class augroup
+---Create autocommand group
+---@class augroup.class : class
 ---@field name string
----@field autocmd table<string,autocmd> Contains all added autocommands
----@field uid? number Unique ID returned by vim
----@overload fun(name: string, clear?: boolean)
-augroup = class 'augroup'
-
----@type table<string|number,augroup>
-user_config.augroup = user_config.augroup or {}
-
----@type table<string,augroup>
-user_config.augroup_by_uid = user_config.augroup_by_uid or {}
+---@field autocmd augroup.autocmd
+---@field id? integer Unique ID returned by vim
+---@overload fun(name: string, clear?: boolean): augroup
+local augroup = class 'augroup'
+local state = user_config.state.augroup
+local by_id = state.by_id
+local by_name = state.by_name
 
 function augroup:initialize(name, clear)
+  ---@cast self augroup
+  self = self
   assert(type(name) == 'string', 'No augroup name provided')
 
   self.name = name
@@ -30,14 +30,15 @@ function augroup:initialize(name, clear)
     errorf('augroup.%s: Already exists', self.name)
   end
 
-  self.autocmd = {}
-  self.autocmd_by_uid = {}
-  self.uid = vim.api.nvim_create_augroup(self.name, {clear = clear})
+  self.autocmd = { by_id = {}, by_name = {} }
+  self.id = mkgroup(self.name, { clear = clear })
 
-  user_config.augroup[self.name] = self
-  user_config.augroup_by_uid[self.uid] = self
+  by_id[self.id] = self
+  by_name[self.name] = self
 end
 
+---Check if augroup exists
+---@return boolean
 function augroup:exists()
   if vim.fn.exists('#' .. self.name) == 1 then
     return true
@@ -46,35 +47,33 @@ function augroup:exists()
   end
 end
 
----@return boolean 
+---@return boolean
 function augroup:disable()
   if not self:exists() then
     return false
   end
 
   for _, au in pairs(self.autocmd) do au:disable() end
-  vim.api.nvim_del_augroup_by_id(self.uid)
-
-  self.uid = false
-  self.autocmd = {}
-  self.autocmd_by_uid = {}
+  vim.api.nvim_del_augroup_by_id(self.id)
+  self.id = nil
+  self.autocmd = { by_id = {}, by_name = {} }
 
   return true
 end
 
----@param name_or_id string|number
+---@param name_or_id string|integer
 ---@return boolean
 function augroup:has(name_or_id)
   return self:get(name_or_id) ~= nil
 end
 
----@param name_or_id string|number
+---@param name_or_id string|integer
 ---@return autocmd?
 function augroup:get(name_or_id)
-  return self.autocmd_by_uid[name_or_id] or self.autocmd[name_or_id] 
+  return self.autocmd.by_id[name_or_id] or self.autocmd.by_name[name_or_id]
 end
 
----@param name_or_id string|number
+---@param name_or_id string|integer
 ---@return autocmd?
 function augroup:pop(name_or_id)
   if not name_or_id:match(self.name) then
@@ -85,56 +84,53 @@ function augroup:pop(name_or_id)
   if au == nil then
     return
   else
-    self.augroup_by_uid[au.uid] = nil
-    self.augroup[au.name] = nil
+    self.autocmd.by_id[au.id] = nil
+    self.autocmd.by_name[au.name] = nil
     au:disable()
-
     return au
   end
 end
 
 ---@param event string|string[]
 ---@param callback string|function
----@param opts? autocmdOpts
+---@param opts? autocmd.opts
 ---@return autocmd?
 function augroup:append(event, callback, opts)
   if not self:exists() then
-    return 
+    return
   end
 
   opts = opts or {}
   opts = vim.deepcopy(opts)
-  opts.group = self.uid
+  opts.group = self.id
   local name = opts.name
 
   if name and not name:match(self.name) then
     opts.name = self.name .. '.' .. name
   end
 
-  opts.group = self.uid
+  opts.group = self.id
   local au = autocmd.set(event, callback, opts)
 
   if au.name then
-    self.autocmd[au.name] = au 
+    self.autocmd.by_name[au.name] = au
   end
 
-  self.autocmd[au.name] = au
-  self.autocmd_by_uid[au.uid] = au
-
+  self.autocmd.by_id[au.id] = au
   return au
 end
 
----Other augroup utils stuff
+---Command augroup utilities
 augroup.utils = {}
 local group_utils = augroup.utils
 
----@param name_or_id number|string
+---@param name_or_id integer|string
 ---@return augroup
 function group_utils.get(name_or_id)
-  return user_config.autocmd_by_uid[name_or_id] or user_config.autocmd[name_or_id]
+  return by_id[name_or_id] or by_name[name_or_id]
 end
 
----@param name_or_id number|string
+---@param name_or_id integer|string
 ---@return boolean
 function group_utils.exists(name_or_id)
   return group_utils.get(name_or_id) ~= nil
@@ -158,7 +154,8 @@ function group_utils.new(name, force)
 end
 
 ---@param name string
----@param specs table<string|number,autocmd>
+---@param clear boolean
+---@param specs table<string|integer,autocmd>
 ---@return augroup
 function augroup.set(name, clear, specs)
   local group = group_utils.get(name) or augroup(name, clear)
@@ -179,10 +176,10 @@ end
 augroup.push = augroup.append
 
 if not user_config.default_augroup then
-  user_config.default_augroup = augroup 'user_config'
+  user_config.default_augroup = augroup('user_config', true)
 end
 
--- augroup.set('MyConfig', {
+-- augroup.set('MyConfig', false, {
 --   test = {'BufEnter', ':echo "world"', {pattern = "*.txt"}}
 -- })
 

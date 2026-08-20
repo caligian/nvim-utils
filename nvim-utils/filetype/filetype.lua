@@ -1,19 +1,30 @@
-#!/usr/bin/env luajit
-local lutils = require 'lua-utils'
-local types = require 'lua-utils.types'
+require 'lua-utils'
+
 local dict = require 'lua-utils.dict'
 local list = require 'lua-utils.list'
-local path_utils = require 'lua-utils.path_utils'
 local validate = require 'lua-utils.validate'
-local union = types.union
 
-require 'lua-utils.class'
-require 'nvim-utils.augroup'
+local autocmd = require 'nvim-utils.autocmd'
+local augroup = require 'nvim-utils.augroup'
+
 require 'nvim-utils.buffer'
 require 'nvim-utils.buffer_group'
 require 'nvim-utils.keymap'
-require 'nvim-utils.autocmd'
 require 'nvim-utils.command'
+
+---@class filetype.keymap.spec
+---@field [1] table|string
+---@field [2] string
+---@field [3] string|callable
+---@field [4]? keymap.opts
+
+---@class filetype.autocmd.spec
+---@field [1] autocmd.event
+---@field [2] autocmd.callback
+---@field [3]? autocmd.opts
+
+---@class filetype.command.spec
+---@field [1] table|string
 
 ---@class filetype.buffer
 ---@field var? table<string,any>,
@@ -23,41 +34,50 @@ require 'nvim-utils.command'
 ---@field pattern string|[]string
 ---@field check_depth? number (default: 4)
 
----@alias filetype.terminal table<string,terminal>
----@alias filetype.repl     table<string,repl>
----@alias filetype.compiler table<string,terminal>
----@alias filetype.keymap   table<string,keymap>
----@alias filetype.command  table<string,command>
----@alias filetype.autocmd  table<string,autocmd>
+---@alias filetype.terminal_dict table<string,terminal>
+---@alias filetype.repl_dict     table<string,repl>
+---@alias filetype.compiler_dict table<string,terminal>
+---@alias filetype.keymap_dict   table<string,filetype.keymap.spec>
+---@alias filetype.command_dict  table<string,command.spec>
+---@alias filetype.autocmd_dict  table<string,filetype.autocmd.spec>
 
----@alias filetype.state
----@field terminal filetype.terminal
----@field repl filetype.repl
----@field compiler filetype.compiler
----@field command filetype.command
----@field autocmd filetype.autocmd
----@field keymap filetype.keymap
+---@class filetype.state
+---@field terminal filetype.terminal_dict
+---@field repl filetype.repl_dict
+---@field compiler filetype.compiler_dict
+---@field command filetype.command_dict
+---@field autocmd filetype.autocmd_dict
+---@field keymap filetype.keymap_dict
 
 ---@class filetype.compile.cmd.args
 ---@field buf number
 ---@field file string
 
----@alias compile.shape string|(fun(args: filetype.compile.cmd.args): string)
----@alias compile.pattern string|(fun(args: filetype.compiler.cmd.args): boolean)
+---@alias filetype.compile.run string|(fun(args: filetype.compile.cmd.args): string)
+---@alias filetype.compile.pattern string|(fun(args: filetype.compile.cmd.args): boolean)
 
----@class filetype.shape
+---@class filetype.repl
+---@field cmd? repl.cmd
+---@field command? repl.cmd
+---@field input? repl.opts.input
+---@field root? repl.opts.root
+
+---@class filetype.class : class
 ---@field name string
 ---@field keymap? table<string, keymap.shape>
 ---@field autocmd? table<string, autocmd.shape>
 ---@field command? table<string, command.shape>
----@field run? table<compile.pattern, filetype.compile.shape>
+---@field run? table<filetype.compile.pattern, filetype.compile.run>
 ---@field root? filetype.root
 ---@field buffer? filetype.buffer
 ---@field lsp? table<string,table>
 ---@field state filetype.state
+---@field repl filetype.repl
 
----@class filetype : filetype.shape
----@overload fun(name: string, specs: filetype.shape): filetype.shape
+---@class filetype : filetype.class : instance
+
+---@type filetype.class
+---@overload fun(name: string, specs: filetype.class): filetype
 filetype = class('filetype')
 
 ---Validators for filetype configs
@@ -70,11 +90,13 @@ filetype.validator.self = {
   opt_autocmd = 'table',
   opt_run = 'table',
   opt_repl = {
-    command = 'string',
+    command = union('string', 'table', 'function'),
     opt_input = {
-      opt_use_file = 'boolean',
-      opt_file_string = 'string',
-      opt_apply = 'function',
+      opt_file = {
+        opt_format = 'string',
+        opt_use = 'boolean',
+      },
+      opt_apply = 'callable',
     }
   },
   opt_buffer = {
@@ -82,21 +104,21 @@ filetype.validator.self = {
   },
   opt_lsp = 'table',
   opt_root = {
-    opt_pattern = types.union('string', 'table'),
+    opt_pattern = union('string', 'table'),
     opt_check_depth = 'number'
   }
 }
 
 filetype.validator.autocmd = {
   event = union('table', 'string'),
-  run = union('string', types.callable),
+  run = union('string', 'function'),
   opt_opts = 'table',
 }
 
 filetype.validator.keymap = {
   mode = union('table', 'string'),
   lhs = 'string',
-  rhs = union('string', types.callable),
+  rhs = union('string', 'function'),
   opt_opts = 'table',
 }
 
@@ -156,7 +178,7 @@ function filetype:initialize(ft, config)
   self.run = {}
   self.augroup = augroup.set('user_config.filetype.' .. self.name, true, {})
   self.template = user_config.template[self.name]
-  self.root = {pattern = {".git"}, check_depth = 4}
+  self.root = { pattern = { ".git" }, check_depth = 4 }
 
   dict.mergef(self, config)
   dict.set_unless(self, { 'root', 'pattern' }, { '.git' }, true)
@@ -177,7 +199,7 @@ function filetype:fix_lsp()
 
   if type(self.lsp) == 'string' then
     self.lsp = { [self.lsp] = {} }
-  elseif types.pure_list(self.lsp) then
+  elseif is.pure_list(self.lsp) then
     local lsp = self.lsp
     self.lsp = {}
 
@@ -187,7 +209,7 @@ function filetype:fix_lsp()
 
     return self:fix_lsp()
   else
-    assert(types.pure_dict(self.lsp))
+    assert(is.pure_dict(self.lsp))
   end
 end
 
@@ -314,7 +336,7 @@ function filetype:get_root_dir(bufnr, pat, depth)
     return false, msg
   end
 
-  self.root = self.root or {pattern = {".git"}, check_depth = 4}
+  self.root = self.root or { pattern = { ".git" }, check_depth = 4 }
   local ws = buffer.get_root_dir(
     bufnr,
     pat or self.root.pattern,
@@ -322,7 +344,7 @@ function filetype:get_root_dir(bufnr, pat, depth)
   ) or buffer.dirname(bufnr)
 
   if true then
-    
+
   end
 
   local bg_name = sprintf("%s.%s", self.name, ws)

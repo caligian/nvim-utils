@@ -3,7 +3,7 @@
 require 'nvim-utils.filetype.filetype'
 require 'lua-utils.dump'
 
-local path_utils = require 'lua-utils.path_utils'
+local path = require 'lua-utils.path_utils'
 
 ---Other class methods and static methods
 filetype.utils = {}
@@ -42,11 +42,11 @@ end
 ---@return []string
 function utils.list_builtin()
   local ft_path = user_config.path.dir.filetype
-  local ft_paths = path_utils.glob(ft_path .. '/*.lua')
+  local ft_paths = path.glob(ft_path .. '/*.lua')
   local res = {}
 
-  for _, path in ipairs(ft_paths) do
-    local ft = path_utils.basename(path):gsub('%.lua$', '')
+  for _, p in ipairs(ft_paths) do
+    local ft = path.basename(p):gsub('%.lua$', '')
     res[#res + 1] = ft
   end
 
